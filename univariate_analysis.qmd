@@ -47,7 +47,7 @@ caricare il proteinGroups.txt, inserire il path completo.
 
 ```{r loading-data}
 r6$loading_data(
-  input_path = "some/path/proteinGroups.txt",
+  input_path = "C:/Users/ieo4973/Documents/AP_secretoma/proteinGroups.txt",
   input_type = "max_quant" 
 )
 ```
@@ -63,7 +63,7 @@ condB_3
 
 ```{r make-expdesig}
 r6$make_expdesign(
-  start_with = "lfq_intensity_"
+  start_with = "lfq_intensity_bc_"
 )
 ```
 
@@ -149,6 +149,22 @@ r6$plot_imputation()
 
 ```{r plot-corr}
 r6$plot_correlation()
+```
+
+# test corr2
+```{r}
+## test1
+library(corrmorant)
+mat <- r6$imputed_data %>% 
+  dplyr::select(gene_names, label, intensity) %>%
+  tidyr::pivot_wider(names_from = label, values_from = intensity) 
+
+corrmorant::corrmorant(mat)
+
+## test2
+library(GGally)
+GGally::ggpairs(mat, columns = 2:16) +
+  theme_minimal()
 ```
 
 # PCA plot
