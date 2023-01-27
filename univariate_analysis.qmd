@@ -36,6 +36,7 @@ library(gt)
 library(visNetwork)
 library(ggplot2)
 library(vsn)
+library(corrmorant)
 
 source(file = here::here("r6class_app.R"))
 
@@ -148,23 +149,8 @@ r6$plot_imputation()
 # Correlation plot
 
 ```{r plot-corr}
-r6$plot_correlation()
-```
-
-# test corr2
-```{r}
-## test1
-library(corrmorant)
-mat <- r6$imputed_data %>% 
-  dplyr::select(gene_names, label, intensity) %>%
-  tidyr::pivot_wider(names_from = label, values_from = intensity) 
-
-corrmorant::corrmorant(mat)
-
-## test2
-library(GGally)
-GGally::ggpairs(mat, columns = 2:16) +
-  theme_minimal()
+r6$plot_correlation_interactive()
+r6$plot_correlation_static(cor_method = "pearson")
 ```
 
 # PCA plot

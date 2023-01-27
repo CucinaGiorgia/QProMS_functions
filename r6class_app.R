@@ -503,7 +503,7 @@ QProMS <- R6::R6Class(
       
       return(p)
     },
-    plot_correlation = function(){
+    plot_correlation_interactive = function(){
       # define if use normalize or row intensity
       if(self$is_norm){
         data <- self$normalized_data
@@ -539,6 +539,30 @@ QProMS <- R6::R6Class(
         echarts4r::e_toolbox_feature(feature = c("saveAsImage"))
       
       return(p)
+    },
+    plot_correlation_static = function(cor_method = "pearson", single_condition = NULL){
+      
+      if(self$is_norm){
+        data <- self$normalized_data
+      }else{
+        data <- self$filtered_data
+      }
+      
+      p <- data %>% 
+        {if(!is.null(single_condition)) dplyr::filter(., condition == single_condition) else .}%>%
+        dplyr::select(gene_names, label, intensity) %>%
+        tidyr::pivot_wider(names_from = label, values_from = intensity) %>% 
+        dplyr::ungroup() %>% 
+        corrmorant::ggcorrm(corr_method = cor_method) +
+        corrmorant::utri_heatmap(alpha = 0.5) +
+        corrmorant::utri_corrtext(corr_size = FALSE) +
+        corrmorant::dia_names(y_pos = 0.15, size = 3) +
+        corrmorant::dia_histogram(fill = "white", color = 1) +
+        corrmorant::lotri(geom_point(alpha = 0.5, size = 0.8)) +
+        ggplot2::scale_fill_viridis_c(direction = -1, end = 0.8)
+      
+      return(p)
+      
     },
     imputation = function(imp_methods = "mixed", shift = 1.8, scale = 0.3) {
       
