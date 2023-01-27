@@ -167,7 +167,7 @@ condA_vs_condB
 
 ```{r tests}
 ## single test format
-tests <- "condA_vs_condB"
+tests <- "rev_vs_dmso"
 
 ## multiple test format
 tests <- c("condA_vs_condB", "condA_vs_condC")
@@ -195,11 +195,33 @@ per vedere la tabella risultate per adesso non ho creato una funzione, ma ecco c
 r6$stat_table %>% View()
 ```
 
+```{r}
+## test for top n fold change protein
+
+# se ho bisogno del top n assoluto:
+vect <- r6$stat_table %>% 
+  dplyr::slice_max(abs(rev_vs_dmso_fold_change), n = 20) %>% 
+  dplyr::pull(gene_names)
+
+# se ho bisogno del top n sia up che down
+
+vec_up <- r6$stat_table %>% 
+  dplyr::slice_max(rev_vs_dmso_fold_change, n = 10) %>% 
+  dplyr::pull(gene_names)
+
+vec_down <- r6$stat_table %>% 
+  dplyr::slice_min(rev_vs_dmso_fold_change, n = 10) %>% 
+  dplyr::pull(gene_names)
+
+vect <- c(vec_up, vec_down)
+```
+
+
 volcano plot:
 se si vuole vedere un gene in particolare o una lista di geni sostituire il NULL in highlights_names con il gene di interesse
 
 ```{r plot-volcano}
-r6$plot_volcano(test = tests, highlights_names = NULL)
+r6$plot_volcano(test = tests, highlights_names = vect)
 ```
 
 # Functional analysis
