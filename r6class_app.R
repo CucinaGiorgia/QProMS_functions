@@ -5,35 +5,36 @@ QProMS <- R6::R6Class(
   public = list(
     ####################
     # Input parameters #
+    raw_data = NULL,
     data = NULL,
-    input_type = NULL,
-    intensity_type = NULL,
+    input_type = "max_quant",
+    intensity_type = "lfq_intensity_",
+    organism = NULL, #questo potrebbe essere tolto visto usiamo solo humans
     expdesign = NULL,
     color_palette = NULL,
     # parameters for data wrangling #
     filtered_data = NULL,
-    valid_val_filter = NULL,
-    valid_val_thr = NULL,
-    pep_filter = NULL,
-    pep_thr = NULL,
-    rev = NULL,
-    cont = NULL,
-    oibs = NULL,
+    valid_val_filter = "alog",
+    valid_val_thr = 0.75,
+    pep_filter = "peptides",
+    pep_thr = 2,
+    rev = TRUE,
+    cont = TRUE,
+    oibs = TRUE,
     ###############################
     # parameters for normalization #
     normalized_data = NULL,
-    norm_methods = NULL,
+    norm_methods = "None",
     is_norm = FALSE,
-    vsn_norm_run_once = FALSE,
     ############################
     # parameters for imputation #
     imputed_data = NULL,
     imp_methods = NULL,
     is_mixed = NULL,
     is_imp = FALSE,
-    imp_run_once = FALSE,
     #################
     # parameters For Statistics #
+    all_test_combination = NULL,
     tested_condition = NULL,
     univariate = NULL,
     clusters_def = NULL,
@@ -48,17 +49,23 @@ QProMS <- R6::R6Class(
     # Functions #
     loading_data = function(input_path, input_type){
       
-      self$data <- data.table::fread(input = input_path) %>%
+      self$raw_data <- data.table::fread(input = input_path) %>%
         tibble::as_tibble(.name_repair = janitor::make_clean_names)
       
       self$input_type <- input_type
     },
     define_colors = function(){
       n_of_color <- max(self$expdesign %>% dplyr::count(replicate) %>% dplyr::pull(n))
-      self$color_palette <- head(viridis::viridis(n = n_of_color + 1, direction = 1), -1)
+      self$color_palette <- viridis::viridis(n = n_of_color , direction = -1, end = 0.70, begin = 0.30)
     },
     make_expdesign = function(start_with = "lfq_intensity_"){
       ## qui mettere tutti gli if in base all'intensity type
+      
+      self$intensity_type <- start_with
+      
+      self$data <- self$raw_data %>% 
+        dplyr::mutate(dplyr::across(dplyr::starts_with(start_with), ~ log2(.))) %>%
+        dplyr::mutate(dplyr::across(dplyr::starts_with(start_with), ~ dplyr::na_if(.,-Inf)))
       
       self$expdesign <- self$data %>%
         dplyr::select(gene_names, dplyr::starts_with(start_with)) %>%
@@ -68,11 +75,6 @@ QProMS <- R6::R6Class(
         dplyr::mutate(condition = stringr::str_remove(label, "_[^_]*$")) %>%
         dplyr::mutate(replicate = stringr::str_remove(label, ".*_"))
       
-      self$define_colors()
-      
-      if(self$input_type == "max_quant"){
-        self$pg_preprocessing()
-      }
     },
     define_tests = function(){
       conditions <-
@@ -98,32 +100,44 @@ QProMS <- R6::R6Class(
       ## Indentify all duplicate gene names 
       ## and add after __ the protein iD
       
-      data <- self$data
+      data <- self$raw_data %>%
+        dplyr::mutate(dplyr::across(dplyr::starts_with(self$intensity_type), ~ log2(.))) %>%
+        dplyr::mutate(dplyr::across(dplyr::starts_with(self$intensity_type), ~ dplyr::na_if(.,-Inf)))
+      
       expdesign <- self$expdesign
       
-      list_unique_gene_names <- data %>%
+      self$define_colors()
+      self$define_tests()
+      
+      data_standardized <- data %>%
         dplyr::select(protein_i_ds, gene_names, id) %>%
         dplyr::mutate(gene_names = stringr::str_extract(gene_names, "[^;]*")) %>%
         ## every protein gorups now have only 1 gene name associated to it
         dplyr::rename(unique_gene_names = gene_names) %>%
         janitor::get_dupes(unique_gene_names) %>%
-        dplyr::mutate(unique_gene_names = dplyr::case_when(
-          unique_gene_names != "" ~ paste0(unique_gene_names, "__",
-                                           stringr::str_extract(protein_i_ds, "[^;]*")),
-          TRUE ~ stringr::str_extract(protein_i_ds, "[^;]*"))) %>%
-        dplyr::select(unique_gene_names, id)
-      
-      ## update data that now don't have dupe or missing spot
-      data_unique <- dplyr::left_join(data, list_unique_gene_names, by = "id") %>%
-        dplyr::mutate(gene_names = dplyr::case_when(
-          unique_gene_names != "" ~ unique_gene_names, 
-          TRUE ~ gene_names)) %>%
+        dplyr::mutate(
+          unique_gene_names = dplyr::case_when(
+            unique_gene_names != "" ~ paste0(
+              unique_gene_names,
+              "__",
+              stringr::str_extract(protein_i_ds, "[^;]*")
+            ),
+            TRUE ~ stringr::str_extract(protein_i_ds, "[^;]*")
+          )
+        ) %>%
+        dplyr::select(unique_gene_names, id) %>%
+        dplyr::right_join(data, by = "id") %>%
+        dplyr::mutate(
+          gene_names = dplyr::case_when(unique_gene_names != "" ~ unique_gene_names,
+                                        TRUE ~ gene_names)
+        ) %>%
         dplyr::select(-unique_gene_names) %>%
-        dplyr::mutate(gene_names = stringr::str_extract(gene_names, "[^;]*"))
-      
-      ### this second part standardize the data in the right format
-      
-      data_standardized <- data_unique %>% 
+        dplyr::mutate(gene_names = dplyr::if_else(
+          gene_names == "",
+          stringr::str_extract(protein_i_ds, "[^;]*"),
+          gene_names
+        )) %>%
+        dplyr::mutate(gene_names = stringr::str_extract(gene_names, "[^;]*")) %>% 
         dplyr::select(
           gene_names,
           dplyr::all_of(expdesign$key),
@@ -146,8 +160,6 @@ QProMS <- R6::R6Class(
           values_to = "raw_intensity"
         ) %>%
         dplyr::inner_join(., expdesign, by = "key") %>%
-        dplyr::mutate(raw_intensity = log2(raw_intensity)) %>%
-        dplyr::mutate(raw_intensity = dplyr::na_if(raw_intensity, -Inf)) %>%
         dplyr::mutate(bin_intensity = dplyr::if_else(is.na(raw_intensity), 0, 1)) %>%
         dplyr::select(-key)
       
@@ -163,21 +175,7 @@ QProMS <- R6::R6Class(
       #### the second part filer the data base on valid values. ####
       ##############################################################
       
-      # store inputs for summary table
-      self$valid_val_filter <- valid_val_filter
-      self$valid_val_thr <- valid_val_thr
-      self$pep_filter <- pep_filter
-      self$pep_thr <- pep_thr
-      self$rev <- rev
-      self$cont <- cont
-      self$oibs <- oibs
-      
-      
-      
-      # setup object parameters
-      self$vsn_norm_run_once <- FALSE
-      self$imp_run_once <- FALSE
-      data <- self$data
+      data <- self$data 
       
       if (self$input_type == "max_quant"){
         ### pep filter puo essere:
@@ -425,46 +423,38 @@ QProMS <- R6::R6Class(
       # store inputs for summary table
       self$norm_methods <- norm_methods
       
-      if(is.null(self$filtered_data)){
-        print("error")
-      }
-      
-      self$imp_run_once <- FALSE
       data <- self$filtered_data
       
       if(norm_methods == "None"){
         self$is_norm <- FALSE
       }else{
-        if(!self$vsn_norm_run_once){
-          
-          self$vsn_norm_run_once <- TRUE
-          
-          ## convert tibble data into a matrix
-          raw_matrix <- data %>%
-            tidyr::pivot_wider(id_cols = gene_names,
-                               names_from = label,
-                               values_from = intensity) %>%
-            tibble::column_to_rownames("gene_names") %>%
-            as.matrix()
-          
-          ## Variance stabilization transformation on matrix
-          vsn_fit <- vsn::vsn2(2 ^ raw_matrix, verbose = FALSE)
-          norm_matrix <- vsn::predict(vsn_fit, 2 ^ raw_matrix)
-          
-          ## return a table with QProMS object format
-          normalized_data <- norm_matrix %>%
-            tibble::as_tibble(rownames = "gene_names") %>%
-            tidyr::pivot_longer(cols = !gene_names,
-                                names_to = "label",
-                                values_to = "norm_intensity") %>%
-            dplyr::full_join(data, .x, by = c("gene_names", "label")) %>%
-            dplyr::mutate(intensity = norm_intensity) %>% 
-            dplyr::select(-norm_intensity) %>% 
-            dplyr::relocate(intensity, .after = last_col())
-          
-          self$normalized_data <- normalized_data
-        }
         self$is_norm <- TRUE
+        
+        ## convert tibble data into a matrix
+        raw_matrix <- data %>%
+          tidyr::pivot_wider(id_cols = gene_names,
+                             names_from = label,
+                             values_from = intensity) %>%
+          tibble::column_to_rownames("gene_names") %>%
+          as.matrix()
+        
+        set.seed(11)
+        ## Variance stabilization transformation on matrix
+        vsn_fit <- vsn::vsn2(2 ^ raw_matrix, verbose = FALSE)
+        norm_matrix <- vsn::predict(vsn_fit, 2 ^ raw_matrix)
+        
+        ## return a table with QProMS object format
+        normalized_data <- norm_matrix %>%
+          tibble::as_tibble(rownames = "gene_names") %>%
+          tidyr::pivot_longer(cols = !gene_names,
+                              names_to = "label",
+                              values_to = "norm_intensity") %>%
+          dplyr::full_join(data, .x, by = c("gene_names", "label")) %>%
+          dplyr::mutate(intensity = norm_intensity) %>% 
+          dplyr::select(-norm_intensity) %>% 
+          dplyr::relocate(intensity, .after = last_col())
+        
+        self$normalized_data <- normalized_data
       }
       
     },
@@ -564,7 +554,7 @@ QProMS <- R6::R6Class(
       return(p)
       
     },
-    imputation = function(imp_methods = "mixed", shift = 1.8, scale = 0.3) {
+    imputation = function(imp_methods = "mixed", shift = 1.8, scale = 0.3, unique_visual = FALSE) {
       
       # store inputs for summary table
       self$imp_methods <- imp_methods
@@ -584,50 +574,67 @@ QProMS <- R6::R6Class(
       
       if(imp_methods == "mixed" | imp_methods == "perseus"){
         self$is_imp <- TRUE
-        if(!self$imp_run_once){
-          
-          self$imp_run_once <- TRUE
-          
-          if(self$is_mixed){
-            data_mixed <- data %>%
-              dplyr::group_by(gene_names, condition) %>%
-              dplyr::mutate(for_mean_imp = dplyr::if_else((sum(bin_intensity) / dplyr::n()) >= 0.75, TRUE, FALSE)) %>%
-              dplyr::mutate(mean_grp = mean(intensity, na.rm = TRUE)) %>%
-              dplyr::ungroup() %>%
-              dplyr::mutate(imp_intensity = dplyr::case_when(
-                bin_intensity == 0 & for_mean_imp ~ mean_grp,
-                TRUE ~ as.numeric(intensity))) %>%
-              dplyr::mutate(intensity = imp_intensity) %>% 
-              dplyr::select(-c(for_mean_imp, mean_grp, imp_intensity))
-            
-            data <- data_mixed
-          }
-          ## this funcion perform classical Perseus imputation
-          ## sice use random nomral distibution i will set a set.seed()
-          set.seed(11)
-          
-          imputed_data <- data %>%
-            dplyr::group_by(label) %>%
-            # Define statistic to generate the random distribution relative to sample
-            dplyr::mutate(
-              mean = mean(intensity, na.rm = TRUE),
-              sd = sd(intensity, na.rm = TRUE),
-              n = sum(!is.na(intensity)),
-              total = nrow(data) - n
-            ) %>%
+        
+        if(self$is_mixed){
+          data_mixed <- data %>%
+            dplyr::group_by(gene_names, condition) %>%
+            dplyr::mutate(for_mean_imp = dplyr::if_else((sum(bin_intensity) / dplyr::n()) >= 0.75, TRUE, FALSE)) %>%
+            dplyr::mutate(mean_grp = mean(intensity, na.rm = TRUE)) %>%
             dplyr::ungroup() %>%
-            # Impute missing values by random draws from a distribution
-            # which is left-shifted by parameter 'shift' * sd and scaled by parameter 'scale' * sd.
             dplyr::mutate(imp_intensity = dplyr::case_when(
-              is.na(intensity) ~ rnorm(total, mean = (mean - shift * sd), sd = sd * scale),
-              TRUE ~ intensity
-            )) %>%
-            dplyr::mutate(intensity = imp_intensity) %>%
-            dplyr::select(-c(mean, sd, n, total, imp_intensity))
+              bin_intensity == 0 & for_mean_imp ~ mean_grp,
+              TRUE ~ as.numeric(intensity))) %>%
+            dplyr::mutate(intensity = imp_intensity) %>% 
+            dplyr::select(-c(for_mean_imp, mean_grp, imp_intensity))
           
-          self$imputed_data <- imputed_data
-          
+          data <- data_mixed
         }
+        
+        if(unique_visual){
+          data_unique <- data %>%
+            dplyr::group_by(gene_names, condition) %>%
+            dplyr::mutate(miss_val = dplyr::n() - sum(bin_intensity)) %>%
+            dplyr::mutate(n_size = dplyr::n()) %>%
+            dplyr::ungroup() %>%
+            dplyr::group_by(gene_names) %>%
+            dplyr::filter(any(miss_val <= 0)) %>%
+            dplyr::ungroup() %>%
+            dplyr::filter(miss_val == n_size) %>% 
+            dplyr::mutate(intensity = min(data$intensity, na.rm = TRUE), unique = TRUE) %>% 
+            dplyr::select(-c(bin_intensity, miss_val, n_size)) %>% 
+            dplyr::rename(unique_intensity = intensity) 
+          
+          data <- data %>% 
+            dplyr::left_join(data_unique, by = c("gene_names", "label", "condition", "replicate")) %>% 
+            dplyr::mutate(unique = if_else(is.na(unique), FALSE, unique)) %>% 
+            dplyr::mutate(intensity = if_else(unique, unique_intensity, intensity)) %>% 
+            dplyr::mutate(bin_intensity = if_else(unique, 1, bin_intensity)) %>% 
+            dplyr::select(-c(unique_intensity, unique)) 
+        }
+        ## this funcion perform classical Perseus imputation
+        ## sice use random nomral distibution i will set a set.seed()
+        set.seed(11)
+        
+        imputed_data <- data %>%
+          dplyr::group_by(label) %>%
+          # Define statistic to generate the random distribution relative to sample
+          dplyr::mutate(
+            mean = mean(intensity, na.rm = TRUE),
+            sd = sd(intensity, na.rm = TRUE),
+            n = sum(!is.na(intensity)),
+            total = nrow(data) - n
+          ) %>%
+          dplyr::ungroup() %>%
+          # Impute missing values by random draws from a distribution
+          # which is left-shifted by parameter 'shift' * sd and scaled by parameter 'scale' * sd.
+          dplyr::mutate(imp_intensity = dplyr::case_when(
+            is.na(intensity) ~ rnorm(total, mean = (mean - shift * sd), sd = sd * scale),
+            TRUE ~ intensity
+          )) %>%
+          dplyr::mutate(intensity = imp_intensity) %>%
+          dplyr::select(-c(mean, sd, n, total, imp_intensity))
+        
+        self$imputed_data <- imputed_data
         
       }else{
         self$is_imp <- FALSE
@@ -992,7 +999,7 @@ QProMS <- R6::R6Class(
         dplyr::mutate(p_val = -log10(p_val)) %>%
         dplyr::mutate(p_val = round(p_val, 3)) %>%
         echarts4r::e_chart(fold_change, renderer = "svg") %>%
-        echarts4r::e_scatter(p_val, legend = FALSE, bind = gene_names) %>%
+        echarts4r::e_scatter(p_val, legend = FALSE, bind = gene_names, symbol_size = 5) %>%
         echarts4r::e_tooltip(
           formatter = htmlwidgets::JS(
             "

@@ -49,7 +49,7 @@ caricare il proteinGroups.txt, inserire il path completo.
 ```{r loading-data}
 r6$loading_data(
   input_path = "C:/Users/ieo4973/Documents/AP_secretoma/proteinGroups.txt",
-  input_type = "max_quant" 
+  input_type = "max_quant"
 )
 ```
 
@@ -61,6 +61,7 @@ condA_3
 condB_1
 condB_2
 condB_3
+
 
 ```{r make-expdesig}
 r6$make_expdesign(
@@ -86,6 +87,8 @@ razor = razor and unique column
 gli ultimi 3 filtano via (con TRUE) i potential contaminant, gli only identify by side e i reverse
 
 ```{r data-wrangling}
+r6$pg_preprocessing()
+
 r6$data_wrangling(
   valid_val_filter = "alog",
   valid_val_thr = 0.75,
@@ -101,6 +104,14 @@ questo grafico mostra il risultato dei filtri sopra selezionati
 
 ```{r protein-counts}
 r6$plot_protein_counts() 
+```
+
+```{r valid-values}
+r6$plot_protein_coverage()
+```
+
+```{r cv}
+r6$plot_cv()
 ```
 
 ora bisogna verificare che le distribuzioni siano normali 
@@ -122,10 +133,16 @@ r6$normalization(norm_methods = "None")
 
 ora bisogna decidere come imputare i missing data rimanenti, utilizzare i seguenti plot per decidere:
 
-```{r plot-missval}
-r6$plot_protein_coverage()
+```{r plot-missval1}
 r6$plot_missing_data()
+```
+
+```{r plot-missval2}
 r6$plot_missval_distribution()
+```
+
+```{r plot-missval3}
+r6$plot_imputation()
 ```
 
 # Imputation
@@ -136,7 +153,8 @@ per imputare i dati usare la seguente funzione, si puo scegliere tra mixed e per
 r6$imputation(
   imp_methods = "mixed",
   shift = 1.8,
-  scale = 0.3
+  scale = 0.3, 
+  unique_visual = FALSE
 )
 ```
 
@@ -150,6 +168,9 @@ r6$plot_imputation()
 
 ```{r plot-corr}
 r6$plot_correlation_interactive()
+```
+
+```{r plot-corr-static}
 r6$plot_correlation_static(cor_method = "pearson")
 ```
 
@@ -170,7 +191,7 @@ condA_vs_condB
 tests <- "rev_vs_dmso"
 
 ## multiple test format
-tests <- c("condA_vs_condB", "condA_vs_condC")
+# tests <- c("rev_vs_dmso", "rev_vs_nw")
 
 ## se si vuole una lista di tutte le possibili conbinazioni usare la seguente funzione:
 r6$define_tests()
@@ -195,33 +216,11 @@ per vedere la tabella risultate per adesso non ho creato una funzione, ma ecco c
 r6$stat_table %>% View()
 ```
 
-```{r}
-## test for top n fold change protein
-
-# se ho bisogno del top n assoluto:
-vect <- r6$stat_table %>% 
-  dplyr::slice_max(abs(rev_vs_dmso_fold_change), n = 20) %>% 
-  dplyr::pull(gene_names)
-
-# se ho bisogno del top n sia up che down
-
-vec_up <- r6$stat_table %>% 
-  dplyr::slice_max(rev_vs_dmso_fold_change, n = 10) %>% 
-  dplyr::pull(gene_names)
-
-vec_down <- r6$stat_table %>% 
-  dplyr::slice_min(rev_vs_dmso_fold_change, n = 10) %>% 
-  dplyr::pull(gene_names)
-
-vect <- c(vec_up, vec_down)
-```
-
-
 volcano plot:
 se si vuole vedere un gene in particolare o una lista di geni sostituire il NULL in highlights_names con il gene di interesse
 
 ```{r plot-volcano}
-r6$plot_volcano(test = tests, highlights_names = vect)
+r6$plot_volcano(test = tests, highlights_names = c("VCAN", "STAT3"))
 ```
 
 # Functional analysis
