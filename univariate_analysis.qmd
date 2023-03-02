@@ -40,20 +40,30 @@ library(corrmorant)
 
 source(file = here::here("r6class_app.R"))
 
-# generare l'oggetto sdfgsd
+# generare l'oggetto
 r6 <- QProMS$new()
 ```
 
 caricare il proteinGroups.txt, inserire il path completo.
+Scopo della funzione: caricare il file e modificarlo (rimuovere gli spazi e i caratteri che potrebbero creare problemi nell'analisi)
 
 ```{r loading-data}
-r6$loading_data(
-  input_path = "C:/Users/ieo4973/Documents/AP_secretoma/proteinGroups.txt",
-  input_type = "max_quant"
-)
+# r6$loading_data(
+#   input_path = here::here("proteinGroups.txt"),
+#   input_type = "max_quant"
+# )
+
+# loading_data <- function(input_path, input_type){
+      
+raw_data <- data.table::fread(input = here::here("proteinGroups.txt")) %>% #Carica file 
+tibble::as_tibble(.name_repair = janitor::make_clean_names) #Modifica file: il nome delle colonne senza spazi e con minuscolo
+      
+input_type <-  "max_quant"
+
+    # }
 ```
 
-questa funzione crea l'experimental design, ma il proteinGroups.txt deve essere creato con la colonna experiment in MaxQuant impostata come:
+Questa funzione crea l'experimental design, ma il proteinGroups.txt deve essere creato con la colonna experiment in MaxQuant impostata come:
 
 condA_1
 condA_2
@@ -62,11 +72,40 @@ condB_1
 condB_2
 condB_3
 
+Data <- Partendo dal raw_data alla funzione viene detto di cercare tutte le variabili che iniziano con un dato pattern (dplyr::starts_with) a tutte le colonne (dplyr""across), modificando la tabella (mutate).
+log2?
+dplyr::na_if viene usato per sostituire tutti i valori non significativi con NA
+
+ExpDesign <- partendo da data, prima sono selezionate le colonne di interesse (gene_names e quelle che iniziano con il pattern). Poi con pivot_longer vengono create due nuove colonne (key riporta i vari lfq, mentre intensity i valori corrispondenti)
+NB: le intensities sono i log2 di ? Le NA sono quelle che rispettavano la condizione data da na_if?
+
+"distinct" permette di isolare una colonna della tabella (in questo caso key). A questo viene aggiunta una nuova colonna tramite mutate (la colonna label). Questa colonna si definisce tramite stringr::str_remove, che ha lo scopo di rimuovere "lfq..." dalla colonna key per dare come output il contenuto della colonna label.
+Con lo stesso apporccio si creano altre due colonne: condition e replicate.
+
 
 ```{r make-expdesig}
-r6$make_expdesign(
-  start_with = "lfq_intensity_bc_"
-)
+# r6$make_expdesign(
+#   start_with = "lfq_intensity_bc_"
+# )
+
+# make_expdesign <- function(start_with = "lfq_intensity_"){
+      ## qui mettere tutti gli if in base all'intensity type
+      
+intensity_type <- "lfq_intensity_bc_"
+      
+data <- raw_data %>% 
+        dplyr::mutate(dplyr::across(dplyr::starts_with("lfq_intensity_bc_"), ~ log2(.))) %>%
+        dplyr::mutate(dplyr::across(dplyr::starts_with("lfq_intensity_bc_"), ~ dplyr::na_if(.,-Inf)))
+      
+expdesign <- data %>%
+  dplyr::select(gene_names, dplyr::starts_with("lfq_intensity_bc_")) %>%
+  tidyr::pivot_longer(!gene_names, names_to = "key", values_to = "intensity") %>%
+  dplyr::distinct(key) %>%
+  dplyr::mutate(label = stringr::str_remove(key, "lfq_intensity_bc_")) %>%
+  dplyr::mutate(condition = stringr::str_remove(label, "_[^_]*$")) %>%
+  dplyr::mutate(replicate = stringr::str_remove(label, ".*_"))
+      
+    # }
 ```
 
 # Data Wrangling
@@ -87,24 +126,236 @@ razor = razor and unique column
 gli ultimi 3 filtano via (con TRUE) i potential contaminant, gli only identify by side e i reverse
 
 ```{r data-wrangling}
-r6$pg_preprocessing()
+#r6$pg_preprocessing()
 
-r6$data_wrangling(
-  valid_val_filter = "alog",
-  valid_val_thr = 0.75,
-  pep_filter = "peptides",
-  pep_thr = 2,
-  rev = TRUE,
-  cont = TRUE,
-  oibs = TRUE
-)
+# pg_preprocessing = function(){
+      ########################################################################
+      #### This function prepare the protein groups in the QProMS format ####
+      #### and remove duplicates.                                         ####
+      ########################################################################
+      
+      ### this first part remove duplicate and missing gene names
+      ### in proteinGroups.txt input
+      
+      ## Indentify all duplicate gene names 
+      ## and add after __ the protein iD
+      
+      
+# self$define_colors()
+
+ # define_colors <- function(){
+      n_of_color <- max(expdesign %>% dplyr::count(replicate) %>% dplyr::pull(n))
+      color_palette <- viridis::viridis(n = n_of_color , direction = -1, end = 0.70, begin = 0.30)
+    # }
+ 
+
+      
+      define_tests <- function(){
+      conditions <-
+        dplyr::distinct(self$expdesign, condition) %>% pull(condition)
+      
+      tests <-
+        tidyr::expand_grid(cond1 = conditions, cond2 = conditions) %>%
+        dplyr::filter(cond1 != cond2) %>%
+        dplyr::mutate(test = paste0(cond1, "_vs_", cond2)) %>%
+        dplyr::pull(test)
+      
+      return(tests)
+    }
+      
+#Partendo da data seleziono 3 colonne (select). Modifico gene_names rimuovendo simboli (stringr::str_extract) e facendo in modo di avere soloo un gene name per ogni proteinID. Rename permette di cambiare il nome della colonna.
+#Con janitor::getdupes identifico i gene_names che hanno lo stesso valore.
+#tutte le colonne rimaste senza gene_names sono rimpiazzate facendo copia incolla delle proteinID.
+#Con right_joint unisco il file data alle due colonne che ho selezionato
+  
+      
+       
+data_standardized <- data %>% 
+  dplyr::select(protein_i_ds, gene_names, id) %>%
+  dplyr::mutate(gene_names = stringr::str_extract(gene_names, "[^;]*")) %>%
+ ## every protein groups now have only 1 gene name associated to it
+  dplyr::rename(unique_gene_names = gene_names) %>%
+  janitor::get_dupes(unique_gene_names) %>%
+  dplyr::mutate(unique_gene_names = dplyr::case_when(
+  unique_gene_names != "" ~ paste0(
+  unique_gene_names, "__",
+  stringr::str_extract(protein_i_ds, "[^;]*")),
+   TRUE ~ stringr::str_extract(protein_i_ds, "[^;]*")
+           )) %>%
+        dplyr::select(unique_gene_names, id) %>%
+        dplyr::right_join(data, by = "id") %>%
+        dplyr::mutate(
+          gene_names = dplyr::case_when(unique_gene_names != "" ~ unique_gene_names,
+                                        TRUE ~ gene_names)
+        ) %>%
+        dplyr::select(-unique_gene_names) %>%
+        dplyr::mutate(gene_names = dplyr::if_else(
+          gene_names == "",
+          stringr::str_extract(protein_i_ds, "[^;]*"),
+          gene_names
+        )) %>%
+        dplyr::mutate(gene_names = stringr::str_extract(gene_names, "[^;]*")) %>% 
+        dplyr::select(
+          gene_names,
+          dplyr::all_of(expdesign$key),
+          peptides,
+          razor_unique_peptides,
+          unique_peptides,
+          reverse,
+          potential_contaminant,
+          only_identified_by_site
+        ) %>% 
+        tidyr::pivot_longer(
+          !c(gene_names,
+             peptides,
+             razor_unique_peptides,
+             unique_peptides,
+             reverse,
+             potential_contaminant,
+             only_identified_by_site),
+          names_to = "key",
+          values_to = "raw_intensity"
+        ) %>% 
+        dplyr::inner_join(., expdesign, by = "key") %>%   #aggiunge righe e colonne che matchano tra expdesign e data
+        dplyr::mutate(bin_intensity = dplyr::if_else(is.na(raw_intensity), 0, 1)) %>%  #Creo nuova colonna. 1 se valore esite, 0 se NA
+        dplyr::select(-key)
+      
+      # self$data <- data_standardized
+#    }
+
+# r6$data_wrangling(
+#   valid_val_filter = "alog",
+#   valid_val_thr = 0.75,
+#   pep_filter = "peptides",
+#   pep_thr = 2,
+#   rev = TRUE,
+#   cont = TRUE,
+#   oibs = TRUE
+# )
+
+#data_wrangling <- function(valid_val_filter = "alog", valid_val_thr = 0.75,
+#                          pep_filter = "peptides", pep_thr = 2,
+#                          rev = TRUE, cont = TRUE, oibs = TRUE, rescue_cont = NULL) 
+       
+      ##############################################################
+      #### this function is divided in 2 steps:                 ####
+      #### the first apply filer specific to maxquant input.    ####
+      #### the second part filer the data base on valid values. ####
+      ##############################################################
+      
+      # data <- self$data 
+      
+
+        ### pep filter puo essere:
+        ## c("peptides", "unique", "razor")
+        
+        data_wrang <- data %>% 
+            # dplyr::mutate(potential_contaminant = dplyr::case_when(
+            # gene_names %in% rescue_cont ~ "", TRUE ~ potential_contaminant)) %>% #Mette "" per ogni gene_names che si trova in rescue_cont
+          ## remove reverse, potentialcontaminant and oibs from data base on user input
+          {if(rev)dplyr::filter(., !reverse == "+") else .} %>%
+          {if(cont)dplyr::filter(., !potential_contaminant == "+") else .} %>%
+          {if(oibs)dplyr::filter(., !only_identified_by_site == "+") else .} %>% 
+          ## filter on peptides:
+          {if(pep_filter == "peptides"){dplyr::filter(., peptides >= 2)}
+            else if (pep_filter == "unique") {dplyr::filter(., unique_peptides >= 2)}
+            else {dplyr::filter(., razor_unique_peptides >= 2)}}
+
+#Quello sopra ma scritto in versione estesa per tutte le condizioni
+data_wrang <- data %>% 
+if(cont == TRUE) {
+  dplyr::filter(data, potential_contaminant == "")
+  } else{
+  data
+} %>% 
+  if(rev==TRUE) {
+    dplyr::filter(data, !reverse=="+") 
+    } else {
+  data
+} %>% 
+  if(oibs==TRUE) {
+    dplyr::filter(data, !only_identified_by_site=="+") 
+    } else {
+    data
+} %>% 
+
+if(pep_filter == "peptides") {
+  dplyr::filter(data, peptides >= 2)
+} else if(pep_filter == "unique"){
+  dplyr::filter(data, unique_peptides >= 2)
+}else{
+  dplyr::filter(data, razor_unique_peptides >= 2)
+} %>% 
+  
+
+
+filtered_data <- data_wrang %>%
+        {if(valid_val_filter == "total")dplyr::group_by(., gene_names)
+          else dplyr::group_by(., gene_names, condition)} %>%
+        dplyr::mutate(miss_val = dplyr::n() - sum(bin_intensity)) %>%
+        dplyr::mutate(n_size = dplyr::n()) %>%
+        dplyr::ungroup() %>%
+        dplyr::group_by(gene_names) %>%
+        ## rage compreso tra 0 e 100% espresso in valori tra 0 e 1
+        {if(valid_val_filter == "alog") dplyr::filter(., any(miss_val <= round(n_size * (1 - valid_val_thr), 0)))
+          else dplyr::filter(., all(miss_val <= round(n_size * (1 - valid_val_thr), 0)))} %>%
+        dplyr::ungroup() %>%
+        dplyr::select(gene_names, label, condition, replicate, bin_intensity, raw_intensity) %>% 
+        dplyr::rename(intensity = raw_intensity)
+      
 ```
 
 questo grafico mostra il risultato dei filtri sopra selezionati
 
 ```{r protein-counts}
-r6$plot_protein_counts() 
+# r6$plot_protein_counts() 
+
+p <- data %>%
+        dplyr::group_by(label) %>%
+        dplyr::summarise(counts = sum(bin_intensity)) %>%
+        dplyr::ungroup() %>%
+        dplyr::inner_join(., expdesign, by = "label") %>%
+        dplyr::mutate(replicate = as.factor(replicate)) %>%
+        dplyr::group_by(condition) %>% 
+        echarts4r::e_charts(replicate, renderer = "svg") %>%
+        echarts4r::e_bar(counts) %>%
+        echarts4r::e_x_axis(name = "Replicates") %>%
+        echarts4r::e_y_axis(name = "Counts") %>%
+        echarts4r::e_tooltip(trigger = "item") %>%
+        echarts4r::e_color(color_palette) %>%
+        echarts4r::e_theme("QProMS_theme") %>% 
+        echarts4r::e_y_axis(
+          name = "Counts",
+          nameLocation = "center",
+          nameTextStyle = list(
+            fontWeight = "bold",
+            fontSize = 16,
+            lineHeight = 60
+          )
+        ) %>%
+        echarts4r::e_x_axis(
+          name = "Replicate",
+          nameLocation = "center",
+          nameTextStyle = list(
+            fontWeight = "bold",
+            fontSize = 14,
+            lineHeight = 60
+          )
+        ) %>% 
+        echarts4r::e_toolbox_feature(feature = c("saveAsImage", "restore", "dataView"))
+      
+    #   return(p)
+    # }
 ```
+
+```{r protein-counts-static}
+ggplot()+
+  geom_bar(mapping= aes(x= condition, y= counts, fill=color_palette))+
+             theme(plot.title = element_text(hjust = 0.5))+
+             labs(title= "Protein counts by condition")+ theme(legend.position = 'bottom')
+             
+```
+
 
 ```{r valid-values}
 r6$plot_protein_coverage()
