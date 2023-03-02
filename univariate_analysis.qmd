@@ -244,12 +244,17 @@ data_standardized <- data %>%
       ##############################################################
       
       # data <- self$data 
-      
+
+pep_filter = "peptides" 
+pep_thr = 2
+rev = TRUE
+cont = TRUE
+oibs = TRUE
 
         ### pep filter puo essere:
         ## c("peptides", "unique", "razor")
         
-        data_wrang <- data %>% 
+        data_wrang <- data_standardized %>% 
             # dplyr::mutate(potential_contaminant = dplyr::case_when(
             # gene_names %in% rescue_cont ~ "", TRUE ~ potential_contaminant)) %>% #Mette "" per ogni gene_names che si trova in rescue_cont
           ## remove reverse, potentialcontaminant and oibs from data base on user input
@@ -257,42 +262,43 @@ data_standardized <- data %>%
           {if(cont)dplyr::filter(., !potential_contaminant == "+") else .} %>%
           {if(oibs)dplyr::filter(., !only_identified_by_site == "+") else .} %>% 
           ## filter on peptides:
-          {if(pep_filter == "peptides"){dplyr::filter(., peptides >= 2)}
-            else if (pep_filter == "unique") {dplyr::filter(., unique_peptides >= 2)}
-            else {dplyr::filter(., razor_unique_peptides >= 2)}}
+          {if(pep_filter == "peptides"){dplyr::filter(., peptides >= pep_thr)}
+            else if (pep_filter == "unique") {dplyr::filter(., unique_peptides >= pep_thr)}
+            else {dplyr::filter(., razor_unique_peptides >= pep_thr)}}
 
 #Quello sopra ma scritto in versione estesa per tutte le condizioni
-data_wrang <- data %>% 
-if(cont == TRUE) {
-  dplyr::filter(data, potential_contaminant == "")
-  } else{
-  data
-} %>% 
-  if(rev==TRUE) {
-    dplyr::filter(data, !reverse=="+") 
-    } else {
-  data
-} %>% 
-  if(oibs==TRUE) {
-    dplyr::filter(data, !only_identified_by_site=="+") 
-    } else {
-    data
-} %>% 
-
-if(pep_filter == "peptides") {
-  dplyr::filter(data, peptides >= 2)
-} else if(pep_filter == "unique"){
-  dplyr::filter(data, unique_peptides >= 2)
-}else{
-  dplyr::filter(data, razor_unique_peptides >= 2)
-} %>% 
+# data_wrang <- data %>%
+# if(cont == TRUE) {
+#   dplyr::filter(data, potential_contaminant == "")
+#   } else{
+#   data
+# } %>%
+#   if(rev==TRUE) {
+#     dplyr::filter(data, !reverse=="+")
+#     } else {
+#   data
+# } %>%
+#   if(oibs==TRUE) {
+#     dplyr::filter(data, !only_identified_by_site=="+")
+#     } else {
+#     data
+# } %>%
+# 
+# if(pep_filter == "peptides") {
+#   dplyr::filter(data, peptides >= 2)
+# } else if(pep_filter == "unique"){
+#   dplyr::filter(data, unique_peptides >= 2)
+# }else{
+#   dplyr::filter(data, razor_unique_peptides >= 2)
+# } 
   
-
+valid_val_filter = "alog"
+valid_val_thr = 0.75
 
 filtered_data <- data_wrang %>%
         {if(valid_val_filter == "total")dplyr::group_by(., gene_names)
-          else dplyr::group_by(., gene_names, condition)} %>%
-        dplyr::mutate(miss_val = dplyr::n() - sum(bin_intensity)) %>%
+          else dplyr::group_by(., gene_names, condition)} %>% 
+        dplyr::mutate(miss_val = dplyr::n() - sum(bin_intensity)) %>% 
         dplyr::mutate(n_size = dplyr::n()) %>%
         dplyr::ungroup() %>%
         dplyr::group_by(gene_names) %>%
@@ -309,14 +315,19 @@ questo grafico mostra il risultato dei filtri sopra selezionati
 
 ```{r protein-counts}
 # r6$plot_protein_counts() 
-
-p <- data %>%
+# plot_protein_counts = function(){
+      
+      # controllare che ci sia il self$filtered_data
+      # data <- self$filtered_data
+      # expdes <- self$expdesign
+p <- filtered_data %>%
         dplyr::group_by(label) %>%
         dplyr::summarise(counts = sum(bin_intensity)) %>%
         dplyr::ungroup() %>%
         dplyr::inner_join(., expdesign, by = "label") %>%
         dplyr::mutate(replicate = as.factor(replicate)) %>%
         dplyr::group_by(condition) %>% 
+  #Costruzione del grafico
         echarts4r::e_charts(replicate, renderer = "svg") %>%
         echarts4r::e_bar(counts) %>%
         echarts4r::e_x_axis(name = "Replicates") %>%
@@ -349,10 +360,27 @@ p <- data %>%
 ```
 
 ```{r protein-counts-static}
-ggplot()+
-  geom_bar(mapping= aes(x= condition, y= counts, fill=color_palette))+
-             theme(plot.title = element_text(hjust = 0.5))+
-             labs(title= "Protein counts by condition")+ theme(legend.position = 'bottom')
+p <- filtered_data %>%
+        dplyr::group_by(label) %>%
+        dplyr::summarise(counts = sum(bin_intensity)) %>%
+        dplyr::ungroup() %>%
+        dplyr::inner_join(., expdesign, by = "label") %>%
+        dplyr::mutate(replicate = as.factor(replicate)) %>%
+        dplyr::group_by(condition)
+
+ n_of_color <- max(expdesign %>% dplyr::count(replicate) %>% dplyr::pull(n))
+      color_palette <- viridis::viridis(n = n_of_color , direction = -1, end = 0.70, begin = 0.30)
+
+      
+       
+ggplot(p,aes(x= label, y= counts, fill=condition))+
+  geom_bar(stat="identity", width = 0.5)+
+  scale_fill_manual(values = color_palette)+
+  theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(legend.position = 'bottom') +
+  labs(title= "Protein counts by condition")+
+  geom_label(aes(label=counts), fill="white")
              
 ```
 
