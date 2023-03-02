@@ -40,7 +40,7 @@ library(corrmorant)
 
 source(file = here::here("r6class_app.R"))
 
-# generare l'oggetto
+# generare l'oggetto sdfgsd
 r6 <- QProMS$new()
 ```
 
