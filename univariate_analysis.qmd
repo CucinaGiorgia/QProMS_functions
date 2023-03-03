@@ -431,8 +431,62 @@ plot_protein_coverage = function(){
     }
 ```
 
+```{r Plot_protein_coverage_static}
+ p1 <- filtered_data %>%
+        dplyr::group_by(gene_names) %>% 
+        dplyr::summarise(counts = sum(bin_intensity)) %>%
+        dplyr::ungroup() %>%
+        dplyr::select(counts) %>%
+        table() %>%
+        tibble::as_tibble() %>%
+        dplyr::rename(occurrence = n)
+p1_1<- p1{\}
+ggplot(p1,aes(x= occurrence, y= counts))+
+  geom_bar(stat="identity", width = 0.6, color="black", fill="#21908CFF")+
+  # scale_y_reverse()+
+  theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5, size = 18), 
+        axis.title.x = element_text(size=15),
+        axis.title.y = element_text(size = 15),
+        axis.text.x = element_text(size=10),
+        axis.text.y = element_text(size = 10))+
+  labs(title= "Protein coverage")+
+  geom_text(aes(label=occurrence), hjust=-0.3, size=4)
+
+```
+
+
 ```{r cv}
 r6$plot_cv()
+    plot_cv = function(){
+      
+      # controllare che ci sia il self$filtered_data
+      data <- self$filtered_data
+      
+      p2 <- filtered_data %>% 
+        dplyr::group_by(gene_names, condition) %>% 
+        dplyr::summarise(
+          mean = mean(intensity, na.rm = TRUE),
+          sd = sd(intensity, na.rm = TRUE),
+          CV = round(sd / mean, 3)
+        ) %>% 
+        dplyr::ungroup() %>% 
+        dplyr::group_by(condition) 
+      
+        echarts4r::e_chart() %>% 
+        echarts4r::e_boxplot(
+          CV,
+          colorBy = "data",
+          outliers = FALSE,
+          itemStyle = list(color = "#DADADA", borderWidth = 2)
+        ) %>%  
+        echarts4r::e_tooltip(trigger = "axis") %>% 
+        echarts4r::e_title(text = "Sample CV", subtext = "Coefficient of variation") %>% 
+        echarts4r::e_color(self$color_palette)
+      
+      return(p)
+    }
+
 ```
 
 ora bisogna verificare che le distribuzioni siano normali 
