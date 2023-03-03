@@ -385,7 +385,7 @@ ggplot(p,aes(x= label, y= counts, fill=condition))+
         axis.text.x = element_text(size=10, angle = 30),
         axis.text.y = element_text(size = 10))+
   labs(title= "Protein counts by condition")+
-  geom_text(aes(label=counts), vjust=-0.2, size=4)
+  geom_text(aes(label=counts), vjust=-0.2, size=4) 
 
 
   #geom_label(aes(label=counts), fill="white", vjust=-0.2, size=4, fontface="bold")
