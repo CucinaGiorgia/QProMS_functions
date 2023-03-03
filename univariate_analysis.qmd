@@ -432,18 +432,19 @@ plot_protein_coverage = function(){
 ```
 
 ```{r Plot_protein_coverage_static}
- p1 <- filtered_data %>%
-        dplyr::group_by(gene_names) %>% 
-        dplyr::summarise(counts = sum(bin_intensity)) %>%
-        dplyr::ungroup() %>%
-        dplyr::select(counts) %>%
-        table() %>%
-        tibble::as_tibble() %>%
-        dplyr::rename(occurrence = n)
-p1_1<- p1{\}
-ggplot(p1,aes(x= occurrence, y= counts))+
+
+p1 <- filtered_data %>%
+  dplyr::group_by(gene_names) %>%
+  dplyr::summarise(counts = sum(bin_intensity)) %>%
+  dplyr::ungroup() %>%
+  dplyr::count(counts) %>% 
+  dplyr::rename(occurrence = n) 
+
+
+
+ggplot(p1,aes(x= counts, y= occurrence))+
   geom_bar(stat="identity", width = 0.6, color="black", fill="#21908CFF")+
-  # scale_y_reverse()+
+  # scale_y_discrete()+
   theme_minimal()+
   theme(plot.title = element_text(hjust = 0.5, size = 18), 
         axis.title.x = element_text(size=15),
@@ -451,7 +452,7 @@ ggplot(p1,aes(x= occurrence, y= counts))+
         axis.text.x = element_text(size=10),
         axis.text.y = element_text(size = 10))+
   labs(title= "Protein coverage")+
-  geom_text(aes(label=occurrence), hjust=-0.3, size=4)
+  geom_text(aes(label=occurrence), hjust=0.5, vjust=-0.5, size=4)
 
 ```
 
@@ -486,6 +487,12 @@ r6$plot_cv()
       
       return(p)
     }
+
+```
+
+
+
+```{r}
 
 ```
 
