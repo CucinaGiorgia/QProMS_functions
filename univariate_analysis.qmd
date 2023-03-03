@@ -464,7 +464,7 @@ r6$plot_cv()
       # controllare che ci sia il self$filtered_data
       data <- self$filtered_data
       
-      p2 <- filtered_data %>% 
+      p <- data %>% 
         dplyr::group_by(gene_names, condition) %>% 
         dplyr::summarise(
           mean = mean(intensity, na.rm = TRUE),
@@ -472,8 +472,7 @@ r6$plot_cv()
           CV = round(sd / mean, 3)
         ) %>% 
         dplyr::ungroup() %>% 
-        dplyr::group_by(condition) 
-      
+        dplyr::group_by(condition) %>% 
         echarts4r::e_chart() %>% 
         echarts4r::e_boxplot(
           CV,
@@ -492,8 +491,40 @@ r6$plot_cv()
 
 
 
-```{r}
+```{r CV_plot static}
+      
+p2 <- filtered_data %>%
+  dplyr::group_by(gene_names, condition) %>%
+  dplyr::summarise(mean = mean(intensity, na.rm = TRUE),
+                   sd = sd(intensity, na.rm = TRUE),
+                   CV = round(sd / mean, 3)) %>%
+  dplyr::ungroup() %>%
+  dplyr::group_by(condition) 
+      
 
+ggplot(p2, aes(x=condition, y=CV, fill=condition))+
+  geom_boxplot(width=0.5, color="black")+
+  scale_fill_manual(values = color_palette)
+        
+
+
+       
+        
+        
+        
+ggplot(p,aes(x= label, y= counts, fill=condition))+
+  geom_bar(stat="identity", width = 0.6, color="black")+
+  scale_fill_manual(values = color_palette)+
+  theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5, size = 18), 
+        legend.position = 'right',
+        axis.title.x = element_text(size=15),
+        axis.title.y = element_text(size = 15),
+        axis.text.x = element_text(size=10, angle = 30),
+        axis.text.y = element_text(size = 10))+
+  labs(title= "Protein counts by condition")+
+  geom_text(aes(label=counts), vjust=-0.2, size=4)      
+      
 ```
 
 ora bisogna verificare che le distribuzioni siano normali 
