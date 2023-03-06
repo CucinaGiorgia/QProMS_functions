@@ -21,7 +21,7 @@ editor: source
 
 Caricare le librerie e le funzioni necessarie
 
-```{r loadin-libreries, echo=FALSE}
+```{r loading-libreries, echo=FALSE}
 library(data.table)
 library(janitor)
 library(here)
@@ -49,10 +49,10 @@ caricare il proteinGroups.txt, inserire il path completo.
 Scopo della funzione: caricare il file e modificarlo (rimuovere gli spazi e i caratteri che potrebbero creare problemi nell'analisi)
 
 ```{r loading-data}
-# r6$loading_data(
-#   input_path = here::here("proteinGroups.txt"),
-#   input_type = "max_quant"
-# )
+r6$loading_data(
+  input_path = here::here("proteinGroups.txt"),
+  input_type = "max_quant"
+)
 
 # loading_data <- function(input_path, input_type){
       
@@ -73,7 +73,7 @@ condB_1
 condB_2
 condB_3
 
-Data <- Partendo dal raw_data alla funzione viene detto di cercare tutte le variabili che iniziano con un dato pattern (dplyr::starts_with) a tutte le colonne (dplyr""across), modificando la tabella (mutate).
+Data <- Partendo dal raw_data alla funzione viene detto di cercare tutte le variabili che iniziano con un dato pattern (dplyr::starts_with) a tutte le colonne (dplyr::across), modificando la tabella (mutate).
 log2?
 dplyr::na_if viene usato per sostituire tutti i valori non significativi con NA
 
@@ -85,9 +85,9 @@ Con lo stesso apporccio si creano altre due colonne: condition e replicate.
 
 
 ```{r make-expdesig}
-# r6$make_expdesign(
-#   start_with = "lfq_intensity_bc_"
-# )
+r6$make_expdesign(
+  start_with = "lfq_intensity_bc_"
+)
 
 # make_expdesign <- function(start_with = "lfq_intensity_"){
       ## qui mettere tutti gli if in base all'intensity type
@@ -127,7 +127,17 @@ razor = razor and unique column
 gli ultimi 3 filtano via (con TRUE) i potential contaminant, gli only identify by side e i reverse
 
 ```{r data-wrangling}
-#r6$pg_preprocessing()
+r6$pg_preprocessing()
+
+r6$data_wrangling(
+  valid_val_filter = "alog",
+  valid_val_thr = 0.75,
+  pep_filter = "peptides",
+  pep_thr = 2,
+  rev = TRUE,
+  cont = TRUE,
+  oibs = TRUE
+)
 
 # pg_preprocessing = function(){
       ########################################################################
@@ -504,26 +514,15 @@ p2 <- filtered_data %>%
 
 ggplot(p2, aes(x=condition, y=CV, fill=condition))+
   geom_boxplot(width=0.5, color="black")+
-  scale_fill_manual(values = color_palette)
-        
-
-
-       
-        
-        
-        
-ggplot(p,aes(x= label, y= counts, fill=condition))+
-  geom_bar(stat="identity", width = 0.6, color="black")+
   scale_fill_manual(values = color_palette)+
   theme_minimal()+
-  theme(plot.title = element_text(hjust = 0.5, size = 18), 
+  theme(plot.title = element_text(hjust = 0.5, size = 18),
         legend.position = 'right',
-        axis.title.x = element_text(size=15),
+        axis.title.x = element_text(size = 15),
         axis.title.y = element_text(size = 15),
-        axis.text.x = element_text(size=10, angle = 30),
-        axis.text.y = element_text(size = 10))+
-  labs(title= "Protein counts by condition")+
-  geom_text(aes(label=counts), vjust=-0.2, size=4)      
+        axis.text = element_text(size = 10))+
+  labs(title="Coefficient variation plot")
+      
       
 ```
 
@@ -533,7 +532,113 @@ ora bisogna verificare che le distribuzioni siano normali
 
 ```{r plot-dis}
 r6$plot_distribution()
+
+    normalization = function(norm_methods = "None"){
+      
+      # store inputs for summary table
+      self$norm_methods <- norm_methods
+      
+      data <- self$filtered_data
+      
+      if(norm_methods == "None"){
+        self$is_norm <- FALSE
+      }else{
+        self$is_norm <- TRUE
+        
+        ## convert tibble data into a matrix
+        raw_matrix <- data %>%
+          tidyr::pivot_wider(id_cols = gene_names,
+                             names_from = label,
+                             values_from = intensity) %>%
+          tibble::column_to_rownames("gene_names") %>%
+          as.matrix()
+        
+        set.seed(11)
+        ## Variance stabilization transformation on matrix
+        vsn_fit <- vsn::vsn2(2 ^ raw_matrix, verbose = FALSE)
+        norm_matrix <- vsn::predict(vsn_fit, 2 ^ raw_matrix)
+        
+        ## return a table with QProMS object format
+        normalized_data <- norm_matrix %>%
+          tibble::as_tibble(rownames = "gene_names") %>%
+          tidyr::pivot_longer(cols = !gene_names,
+                              names_to = "label",
+                              values_to = "norm_intensity") %>%
+          dplyr::full_join(data, .x, by = c("gene_names", "label")) %>%
+          dplyr::mutate(intensity = norm_intensity) %>% 
+          dplyr::select(-norm_intensity) %>% 
+          dplyr::relocate(intensity, .after = last_col())
+        
+        self$normalized_data <- normalized_data
+      }
+      
+    }
+
+    plot_distribution = function(){
+      
+      if(self$is_norm){
+        data <- self$normalized_data
+      }else{
+        data <- self$filtered_data
+      }
+      
+      p <- data %>%
+        dplyr::mutate(intensity = round(intensity, 2)) %>%
+        dplyr::group_by(condition, label) %>%
+        echarts4r::e_charts(renderer = "svg") %>%
+        echarts4r::e_boxplot(
+          intensity,
+          colorBy = "data",
+          layout = 'horizontal',
+          outliers = FALSE,
+          itemStyle = list(borderWidth = 2)
+        ) %>%
+        echarts4r::e_tooltip(trigger = "item") %>%
+        echarts4r::e_color(self$color_palette) %>%
+        echarts4r::e_theme("QProMS_theme") %>% 
+        echarts4r::e_y_axis(
+          name = "Intensity",
+          nameLocation = "center",
+          nameTextStyle = list(
+            fontWeight = "bold",
+            fontSize = 16,
+            lineHeight = 60
+          )
+        ) %>% 
+        echarts4r::e_toolbox_feature(feature = "saveAsImage")
+      
+      return(p)
+    }
 ```
+
+```{r}
+
+raw_matrix <- filtered_data %>%
+  tidyr::pivot_wider(id_cols = gene_names,
+                     names_from = label,
+                     values_from = intensity) %>%
+  tibble::column_to_rownames("gene_names") %>%
+  as.matrix()
+## Variance stabilization transformation on matrix
+vsn_fit <- vsn::vsn2(2 ^ raw_matrix, verbose = FALSE)
+norm_matrix <- vsn::predict(vsn_fit, 2 ^ raw_matrix)
+        
+## return a table with QProMS object format
+normalized_data <- norm_matrix %>%
+  tibble::as_tibble(rownames = "gene_names") %>% 
+  tidyr::pivot_longer(cols = !gene_names,
+                      names_to = "label",
+                      values_to = "norm_intensity") %>%
+  dplyr::full_join(data, .x, by = c("gene_names", "label")) %>%
+  dplyr::mutate(intensity = norm_intensity) %>% 
+  dplyr::select(-norm_intensity) %>% 
+  dplyr::relocate(intensity, .after = last_col())
+        
+        self$normalized_data <- normalized_data
+
+
+```
+
 
 nel caso le distribuzioni non siano normali, è possibile noralizzarle con la seguente funzione:
 per ora c'è solo l'opzione con la vsn
@@ -548,11 +653,184 @@ ora bisogna decidere come imputare i missing data rimanenti, utilizzare i seguen
 
 ```{r plot-missval1}
 r6$plot_missing_data()
+
+ plot_missing_data <- function(){
+      
+      # controllare che ci sia il self$filtered_data
+      data <- self$filtered_data
+      
+      p <- data %>%
+        dplyr::group_by(label) %>%
+        dplyr::mutate(bin_intensity = dplyr::if_else(bin_intensity == 1, "Valid", "Missing")) %>%
+        dplyr::count(bin_intensity) %>%
+        tidyr::pivot_wider(id_cols = label, names_from = bin_intensity, values_from = n) %>%
+        {if(ncol(.) == 2) dplyr::mutate(., Missing = 0)else . } %>%
+        dplyr::ungroup() %>%
+        dplyr::mutate(total = Valid + Missing) %>%
+        dplyr::mutate(perc_present = paste0(round(Valid*100/total, 1), "%")) %>%
+        dplyr::mutate(perc_missing = paste0(round(Missing*100/total, 1), "%")) %>%
+        echarts4r::e_charts(label, renderer = "svg") %>%
+        echarts4r::e_bar(Valid, stack = "grp", bind = perc_present) %>%
+        echarts4r::e_bar(Missing, stack = "grp", bind = perc_missing) %>%
+        echarts4r::e_x_axis(name = "Samples", axisLabel = list(interval = 0, rotate = 45)) %>%
+        echarts4r::e_y_axis(name = "Counts") %>%
+        echarts4r::e_tooltip(trigger = "item") %>%
+        echarts4r::e_color(c("#21918c", "#440154")) %>%
+        echarts4r::e_theme("QProMS_theme") %>% 
+        echarts4r::e_y_axis(
+          name = "Counts",
+          nameLocation = "center",
+          nameTextStyle = list(
+            fontWeight = "bold",
+            fontSize = 16,
+            lineHeight = 60
+          )
+        ) %>% 
+        echarts4r::e_toolbox_feature(feature = c("saveAsImage", "restore", "dataView"))
+      
+      return(p)
+    }
 ```
 
-```{r plot-missval2}
-r6$plot_missval_distribution()
+```{r Plot_missing_data_static}
+p3 <- filtered_data %>%
+  dplyr::group_by(label, condition) %>% 
+  dplyr::mutate(bin_intensity = dplyr::if_else(bin_intensity == 1, "Valid", "Missing")) %>%
+  dplyr::count(bin_intensity) %>% 
+  tidyr::pivot_wider(id_cols = NULL, names_from = bin_intensity, values_from = n) %>% 
+  {if(ncol(.) == 2) dplyr::mutate(., Missing = 0)else . } %>% 
+  dplyr::ungroup() %>%
+  dplyr::mutate(total = Valid + Missing) %>%
+  dplyr::mutate(perc_present = paste0(round(Valid*100/total, 1), "%")) %>%
+  dplyr::mutate(perc_missing = paste0(round(Missing*100/total, 1), "%"))
+
+#Plot only valid data 
+ggplot(p3,aes(x= label, y= Valid, fill=condition))+
+  geom_bar(stat="identity", width = 0.6, color="black")+
+  scale_fill_manual(values = color_palette)+
+  theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5, size = 18), 
+        legend.position = 'right',
+        axis.title.x = element_text(size=15),
+        axis.title.y = element_text(size = 15),
+        axis.text.x = element_text(size=10, angle = 30),
+        axis.text.y = element_text(size = 10))+
+  labs(title= "Plot valid data", x="Samples", y="Counts")+
+  geom_text(aes(label=Valid), vjust=-0.2, size=4) 
+
+#Plot only missing data
+ggplot(p3,aes(x= label, y= Missing, fill=condition))+
+  geom_bar(stat="identity", width = 0.6, color="black")+
+  scale_fill_manual(values = color_palette)+
+  theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5, size = 18), 
+        legend.position = 'right',
+        axis.title.x = element_text(size=15),
+        axis.title.y = element_text(size = 15),
+        axis.text.x = element_text(size=10, angle = 30),
+        axis.text.y = element_text(size = 10))+
+  labs(title= "Plot missing data", x="Samples", y="Counts")+
+  geom_text(aes(label=Missing), vjust=-0.2, size=4) 
+
+#Summary plot missing/valid data
+p3.1 <-filtered_data %>%
+  dplyr::group_by(label) %>% 
+  dplyr::mutate(bin_intensity = dplyr::if_else(bin_intensity == 1, "Valid", "Missing")) %>%
+  dplyr::count(bin_intensity) %>% 
+  dplyr::mutate(bin_intensity = as.factor(bin_intensity)) %>% 
+  dplyr::rename(Data= bin_intensity)
+
+ggplot(p3.1,aes(x= label, y= n, fill=Data))+
+  geom_bar(stat="identity", width = 0.8, color="black")+
+  scale_fill_manual(values = c("#21908CFF", "#481567FF"))+
+  theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5, size = 18), 
+        legend.position = 'right',
+        axis.title.x = element_text(size=15),
+        axis.title.y = element_text(size = 15),
+        axis.text.x = element_text(size=10, angle = 30),
+        axis.text.y = element_text(size = 10))+
+  labs(title= "Plot valid and missing data", x="Samples", y="Counts")+
+  geom_label(aes(label=n), position= position_stack(vjust = 0.5), size=3, show.legend = FALSE, color="white")
+  #geom_text(aes(label=n), position= position_stack(vjust = 0.5), size=3, fontface="bold", color="white")
 ```
+
+
+```{r plot_missval_distribution}
+r6$plot_missval_distribution()
+    plot_missval_distribution = function(){
+      
+      # controllare che ci sia il self$filtered_data
+      data <- self$filtered_data
+      
+      p <- data %>%
+        dplyr::group_by(gene_names) %>%
+        dplyr::summarise(mean = mean(intensity, na.rm = TRUE),
+                         missval = any(is.na(intensity))) %>%
+        dplyr::ungroup() %>%
+        dplyr::mutate(missing_value = dplyr::if_else(missval, "Missing", "Valid")) %>%
+        dplyr::mutate(missing_value = factor(missing_value, levels = c("Valid", "Missing"))) %>%
+        dplyr::group_by(missing_value) %>%
+        echarts4r::e_charts(renderer = "svg") %>%
+        echarts4r::e_density(
+          mean,
+          smooth = TRUE,
+          areaStyle = list(opacity = 0),
+          symbol = "none"
+        ) %>%
+        echarts4r::e_y_axis(
+          name = "Densiry",
+          nameLocation = "center",
+          nameTextStyle = list(
+            fontWeight = "bold",
+            fontSize = 16,
+            lineHeight = 60
+          )
+        ) %>%  
+        echarts4r::e_x_axis(
+          name = "log2 Intensity",
+          nameLocation = "center",
+          nameTextStyle = list(
+            fontWeight = "bold",
+            fontSize = 16,
+            lineHeight = 60
+          )
+        ) %>%
+        echarts4r::e_color(c("#21918c", "#440154")) %>% 
+        echarts4r::e_toolbox_feature(feature = c("saveAsImage", "restore"))
+      
+      return(p)
+    }
+
+```
+
+```{r Plot_missval_distribution_static}
+    
+p4 <- filtered_data %>%
+  dplyr::group_by(gene_names) %>%
+  dplyr::summarise(mean = mean(intensity, na.rm = TRUE),
+                   missval = any(is.na(intensity))) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(missing_value = dplyr::if_else(missval, "Missing", "Valid")) %>%
+  dplyr::mutate(missing_value = factor(missing_value, levels = c("Valid", "Missing"))) %>%
+  dplyr::group_by(missing_value)
+
+ggplot(p4,aes(x= mean, color=missing_value))+
+  geom_density(lwd=0.8)+
+  scale_color_manual(values = c("#481567FF", "#21908CFF"))+
+  theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5, size = 18), 
+        legend.position = 'right',
+        legend.title = element_blank(),
+        axis.title.x = element_text(size=15),
+        axis.title.y = element_text(size = 15),
+        axis.text.x = element_text(size=10),
+        axis.text.y = element_text(size = 10))+
+  labs(title= "Density plot", x="Log2Intensity", y="Density")
+
+
+```
+
 
 ```{r plot-missval3}
 r6$plot_imputation()
