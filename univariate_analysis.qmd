@@ -611,7 +611,7 @@ r6$plot_distribution()
     }
 ```
 
-```{r}
+```{r Data normalization}
 
 raw_matrix <- filtered_data %>%
   tidyr::pivot_wider(id_cols = gene_names,
@@ -620,21 +620,37 @@ raw_matrix <- filtered_data %>%
   tibble::column_to_rownames("gene_names") %>%
   as.matrix()
 ## Variance stabilization transformation on matrix
-vsn_fit <- vsn::vsn2(2 ^ raw_matrix, verbose = FALSE)
-norm_matrix <- vsn::predict(vsn_fit, 2 ^ raw_matrix)
+# vsn_fit <- vsn::vsn2(2 ^ raw_matrix, verbose = FALSE)
+# norm_matrix <- vsn::predict(vsn_fit, 2 ^ raw_matrix)
         
 ## return a table with QProMS object format
 normalized_data <- norm_matrix %>%
   tibble::as_tibble(rownames = "gene_names") %>% 
   tidyr::pivot_longer(cols = !gene_names,
                       names_to = "label",
-                      values_to = "norm_intensity") %>%
-  dplyr::full_join(data, .x, by = c("gene_names", "label")) %>%
+                      values_to = "norm_intensity") %>% 
+  dplyr::full_join(filtered_data, by = c("gene_names", "label"), copy=TRUE) %>%
   dplyr::mutate(intensity = norm_intensity) %>% 
   dplyr::select(-norm_intensity) %>% 
-  dplyr::relocate(intensity, .after = last_col())
+  dplyr::relocate(intensity, .after = last_col()) %>% 
+  dplyr::mutate(intensity = round(intensity, 2)) %>% 
+  dplyr::group_by(condition, label)
         
-        self$normalized_data <- normalized_data
+#NB: in questo caso i dati erano normalizzati, quindi filtered_data e normalized_data sono uguali
+```
+
+```{r Plot normalized data distribution static}
+     
+ggplot(normalized_data, aes(x=label, y=intensity, fill=condition))+
+  geom_boxplot(width=0.5, color="black")+
+  scale_fill_manual(values = color_palette)+
+  theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5, size = 18),
+        legend.position = 'right',
+        axis.title.x = element_text(size = 15),
+        axis.title.y = element_text(size = 15),
+        axis.text = element_text(size = 10, angle = 30))+
+  labs(title="Normalized data distribution")
 
 
 ```
