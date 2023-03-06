@@ -869,16 +869,218 @@ per vedere l'effetto dell'imputazione
 
 ```{r plot-imputation}
 r6$plot_imputation()
+
+    plot_imputation = function(){
+      
+      if(!self$is_norm & !self$is_imp){
+        data <- self$filtered_data
+      }else if(self$is_norm & !self$is_imp){
+        data <- self$normalized_data
+      }else{
+        data <- self$imputed_data
+      }
+      
+      p <- data %>%
+        dplyr::group_by(condition) %>%
+        echarts4r::e_charts(renderer = "svg") %>%
+        echarts4r::e_density(
+          intensity,
+          smooth = TRUE,
+          areaStyle = list(opacity = 0),
+          symbol = "none"
+        ) %>%
+        echarts4r::e_color(self$color_palette) %>%
+        echarts4r::e_theme("QProMS_theme") %>% 
+        echarts4r::e_toolbox_feature(feature = c("saveAsImage", "restore"))
+      
+      return(p)
+    } 
+
+```
+
+```{r Plot imputation static}
+    imputation = function(imp_methods = "mixed", shift = 1.8, scale = 0.3, unique_visual = FALSE) {
+      
+      # store inputs for summary table
+      self$imp_methods <- imp_methods
+      
+      # Define if use normalize or row intensity
+      if(self$is_norm){
+        data <- self$normalized_data
+      }else{
+        data <- self$filtered_data
+      }
+      
+      if(imp_methods == "mixed"){
+        self$is_mixed <- TRUE
+      }else{
+        self$is_mixed <- FALSE
+      }
+      
+      if(imp_methods == "mixed" | imp_methods == "perseus"){
+        self$is_imp <- TRUE
+        
+        if(self$is_mixed){
+          data_mixed <- data %>%
+            dplyr::group_by(gene_names, condition) %>%
+            dplyr::mutate(for_mean_imp = dplyr::if_else((sum(bin_intensity) / dplyr::n()) >= 0.75, TRUE, FALSE)) %>%
+            dplyr::mutate(mean_grp = mean(intensity, na.rm = TRUE)) %>%
+            dplyr::ungroup() %>%
+            dplyr::mutate(imp_intensity = dplyr::case_when(
+              bin_intensity == 0 & for_mean_imp ~ mean_grp,
+              TRUE ~ as.numeric(intensity))) %>%
+            dplyr::mutate(intensity = imp_intensity) %>% 
+            dplyr::select(-c(for_mean_imp, mean_grp, imp_intensity))
+          
+          data <- data_mixed
+        }
+        
+        if(unique_visual){
+          data_unique <- data %>%
+            dplyr::group_by(gene_names, condition) %>%
+            dplyr::mutate(miss_val = dplyr::n() - sum(bin_intensity)) %>%
+            dplyr::mutate(n_size = dplyr::n()) %>%
+            dplyr::ungroup() %>%
+            dplyr::group_by(gene_names) %>%
+            dplyr::filter(any(miss_val <= 0)) %>%
+            dplyr::ungroup() %>%
+            dplyr::filter(miss_val == n_size) %>% 
+            dplyr::mutate(intensity = min(data$intensity, na.rm = TRUE), unique = TRUE) %>% 
+            dplyr::select(-c(bin_intensity, miss_val, n_size)) %>% 
+            dplyr::rename(unique_intensity = intensity) 
+          
+          data <- data %>% 
+            dplyr::left_join(data_unique, by = c("gene_names", "label", "condition", "replicate")) %>% 
+            dplyr::mutate(unique = if_else(is.na(unique), FALSE, unique)) %>% 
+            dplyr::mutate(intensity = if_else(unique, unique_intensity, intensity)) %>% 
+            dplyr::mutate(bin_intensity = if_else(unique, 1, bin_intensity)) %>% 
+            dplyr::select(-c(unique_intensity, unique)) 
+        }
+        ## this funcion perform classical Perseus imputation
+        ## sice use random nomral distibution i will set a set.seed()
+        set.seed(11)
+        
+        imputed_data <- data %>%
+          dplyr::group_by(label) %>%
+          # Define statistic to generate the random distribution relative to sample
+          dplyr::mutate(
+            mean = mean(intensity, na.rm = TRUE),
+            sd = sd(intensity, na.rm = TRUE),
+            n = sum(!is.na(intensity)),
+            total = nrow(data) - n
+          ) %>%
+          dplyr::ungroup() %>%
+          # Impute missing values by random draws from a distribution
+          # which is left-shifted by parameter 'shift' * sd and scaled by parameter 'scale' * sd.
+          dplyr::mutate(imp_intensity = dplyr::case_when(
+            is.na(intensity) ~ rnorm(total, mean = (mean - shift * sd), sd = sd * scale),
+            TRUE ~ intensity
+          )) %>%
+          dplyr::mutate(intensity = imp_intensity) %>%
+          dplyr::select(-c(mean, sd, n, total, imp_intensity))
+        
+        self$imputed_data <- imputed_data
+        
+      }else{
+        self$is_imp <- FALSE
+      }
+      
+      
+    }
+
+
+
+
+p6 <- imputed_data %>%
+  dplyr::group_by(condition)
+
+
+        echarts4r::e_charts(renderer = "svg") %>%
+        echarts4r::e_density(
+          intensity,
+          smooth = TRUE,
+          areaStyle = list(opacity = 0),
+          symbol = "none"
+        ) %>%
+        echarts4r::e_color(self$color_palette) %>%
+        echarts4r::e_theme("QProMS_theme") %>% 
+        echarts4r::e_toolbox_feature(feature = c("saveAsImage", "restore"))
 ```
 
 # Correlation plot
 
 ```{r plot-corr}
 r6$plot_correlation_interactive()
+
+plot_correlation_interactive = function(){
+      # define if use normalize or row intensity
+      if(self$is_norm){
+        data <- self$normalized_data
+      }else{
+        data <- self$filtered_data
+      }
+      
+      mat <- data %>%
+        dplyr::select(gene_names, label, intensity) %>%
+        tidyr::pivot_wider(names_from = label, values_from = intensity) %>%
+        dplyr::filter(dplyr::if_all(.cols = dplyr::everything(), .fns = ~ !is.na(.x))) %>%
+        tibble::column_to_rownames("gene_names") %>%
+        cor() %>% 
+        round(digits = 2)
+      
+      p <- mat %>% 
+        echarts4r::e_charts(renderer = "svg") %>%
+        echarts4r::e_correlations(order = "hclust", visual_map = FALSE) %>%
+        echarts4r::e_x_axis(axisLabel = list(interval = 0, rotate = 45)) %>%
+        echarts4r::e_y_axis(axisLabel = list(interval = 0, rotate = 0), position = "right") %>%
+        echarts4r::e_tooltip(trigger = "item", formatter = htmlwidgets::JS("
+          function(params){
+          return('X: ' + params.value[0] + '<br />Y: ' + params.value[1] + '<br />Value: ' + params.value[2])
+          }")) %>%
+        echarts4r::e_title("Correlation matrix", subtext = "Pearson correlation") %>%
+        echarts4r::e_visual_map(
+          min = min(mat),
+          max = 1,
+          bottom = 150,
+          inRange = list(color = c("#440154", "#31688e", "#35b779"))
+        ) %>%
+        echarts4r::e_theme("QProMS_theme") %>% 
+        echarts4r::e_toolbox_feature(feature = c("saveAsImage"))
+      
+      return(p)
+    }
 ```
 
 ```{r plot-corr-static}
-r6$plot_correlation_static(cor_method = "pearson")
+#r6$plot_correlation_static(cor_method = "pearson")
+
+
+
+p5 <- filtered_data %>%
+  dplyr::select(gene_names, label, intensity) %>%
+  tidyr::pivot_wider(names_from = label, values_from = intensity) %>%
+  dplyr::filter(dplyr::if_all(.cols = dplyr::everything(), .fns = ~ !is.na(.x))) %>%
+  tibble::column_to_rownames("gene_names") %>% 
+  cor() %>% 
+  round(digits = 2)
+
+p5.1<- as.data.frame(p5) %>% 
+  reshape2::melt(., id=c())
+
+ggplot(p5.1)+
+  geom_point()
+
+  corrmorant::utri_heatmap(alpha = 0.5) +
+  corrmorant::utri_corrtext(corr_size = FALSE) +
+  corrmorant::dia_names(y_pos = 0.15, size = 3) +
+  corrmorant::dia_histogram(fill = "white", color = 1) +
+  corrmorant::lotri(geom_point(alpha = 0.5, size = 0.8)) +
+  ggplot2::scale_fill_viridis_c(direction = -1, end = 0.8) 
+
+
+
+
+
 ```
 
 # PCA plot
