@@ -1061,24 +1061,14 @@ mat <- filtered_data %>%
 library(ggcorrplot)
 
 ggcorrplot(mat,
-           hc.order=TRUE, 
+           hc.order=TRUE,
+           scale_fill_gradient(limit=c(0.7, 1), low = "#35b779", high = "#31688e"),
            outline.col="white", 
            ggtheme = ggplot2::theme_minimal(),
            lab = TRUE,
+           ggplot2::labs(title="Correlation Plot"))
 
-p5 <- filtered_data %>%
-  dplyr::select(gene_names, label, intensity) %>%
-  tidyr::pivot_wider(names_from = label, values_from = intensity) %>%
-  dplyr::filter(dplyr::if_all(.cols = dplyr::everything(), .fns = ~ !is.na(.x))) %>%
-  tibble::column_to_rownames("gene_names") %>% 
-  cor() %>% 
-  round(digits = 2)
 
-p5.1<- as.data.frame(p5) %>% 
-  reshape2::melt(., id=c())
-
-ggplot(p5.1)+
-  geom_point()
 
   corrmorant::utri_heatmap(alpha = 0.5) +
   corrmorant::utri_corrtext(corr_size = FALSE) +
