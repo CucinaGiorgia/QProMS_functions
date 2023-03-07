@@ -1061,33 +1061,255 @@ mat <- filtered_data %>%
 library(ggcorrplot)
 
 ggcorrplot(mat,
+           show.legend = TRUE ,
            hc.order=TRUE,
-           scale_fill_gradient(limit=c(0.7, 1), low = "#35b779", high = "#31688e"),
+           title = "Correlation Plot",
+           colors = c("#481567FF", "#31688e", "#35b779"),
            outline.col="white", 
            ggtheme = ggplot2::theme_minimal(),
            lab = TRUE,
-           ggplot2::labs(title="Correlation Plot"))
+           lab_size = 2.5)
+```
 
+```{r Plot Correlation Static}
+library(ComplexHeatmap)
 
-
-  corrmorant::utri_heatmap(alpha = 0.5) +
-  corrmorant::utri_corrtext(corr_size = FALSE) +
-  corrmorant::dia_names(y_pos = 0.15, size = 3) +
-  corrmorant::dia_histogram(fill = "white", color = 1) +
-  corrmorant::lotri(geom_point(alpha = 0.5, size = 0.8)) +
-  ggplot2::scale_fill_viridis_c(direction = -1, end = 0.8) 
-
-
-
+Heatmap(mat,
+        name="Correlation",
+        col = color_palette,
+        column_title = "Correlation plot",
+        column_title_gp=gpar(fontsize=18),
+        cluster_rows = FALSE,
+        cluster_columns = FALSE)
 
 
 ```
+
 
 # PCA plot
-
 ```{r pca}
 r6$plot_pca(view_3d = FALSE)
+
+ # verificare che ci sia
+      data <- self$imputed_data
+      
+      ## generate a matrix from imputed intensiy
+      mat <- data %>%
+        dplyr::select(gene_names, label, intensity) %>%
+        tidyr::pivot_wider(id_cols = "gene_names",
+                           names_from = "label",
+                           values_from = "intensity") %>%
+        tibble::column_to_rownames("gene_names") %>%
+        as.matrix()
+      
+      ## perform PCA
+      
+      pca <- prcomp(t(mat), center = TRUE, scale = TRUE) 
+      
+      ## calculate persentage of each PC
+      pca_var <- pca$sdev^2
+      pca_var_perc <- round(pca_var/sum(pca_var)*100, 1)
+      
+      ## create a data.frame for the first 3 PC
+      pca_table <- data.frame(
+        label = rownames(pca$x),
+        x = pca$x[, 1],
+        y = pca$x[, 2],
+        z = pca$x[, 3]
+      ) %>% 
+        dplyr::left_join(self$expdesign, by = "label") 
+      
+      ## generate plot
+      if(!view_3d){
+        p <- pca_table %>%
+          dplyr::group_by(condition) %>%
+          echarts4r::e_chart(x, renderer = "svg") %>%
+          echarts4r::e_scatter(y, symbol_size = c(10, 10), bind = replicate) %>%
+          echarts4r::e_tooltip(
+            trigger = "item",
+            formatter = htmlwidgets::JS("
+        function(params){
+          return('Rep: ' + params.name);
+        }
+      ")
+          ) %>%
+          echarts4r::e_title(text = "PCA", subtext = "Principal component analysis") %>%
+          echarts4r::e_x_axis(
+            name = paste0("PC1 - ", pca_var_perc[1], " %"),
+            nameLocation = "center",
+            nameTextStyle = list(
+              fontWeight = "bold",
+              fontSize = 15,
+              lineHeight = 50
+            )
+          ) %>%
+          echarts4r::e_y_axis(
+            name = paste0("PC2 - ", pca_var_perc[2], " %"),
+            nameLocation = "center",
+            nameTextStyle = list(
+              fontWeight = "bold",
+              fontSize = 15,
+              lineHeight = 50
+            )
+          ) %>% 
+          echarts4r::e_color(self$color_palette) %>% 
+          echarts4r::e_toolbox_feature(feature = c("saveAsImage", "restore", "dataView"))
+      }else{
+        p <- pca_table %>%
+          dplyr::group_by(condition) %>%
+          echarts4r::e_chart(x) %>%
+          echarts4r::e_scatter_3d(y, z, symbol_size = c(10, 10), bind = replicate) %>%
+          echarts4r::e_tooltip(
+            trigger = "item",
+            formatter = htmlwidgets::JS("
+        function(params){
+          return('Rep: ' + params.name);
+        }
+      ")
+          ) %>%
+          echarts4r::e_title(text = "PCA", subtext = "Principal component analysis") %>%
+          echarts4r::e_x_axis_3d(
+            name = paste0("PC1 - ", pca_var_perc[1], " %"),
+            nameLocation = "center",
+            nameTextStyle = list(
+              fontWeight = "bold",
+              fontSize = 15,
+              lineHeight = 50
+            )
+          ) %>%
+          echarts4r::e_y_axis_3d(
+            name = paste0("PC2 - ", pca_var_perc[2], " %"),
+            nameLocation = "center",
+            nameTextStyle = list(
+              fontWeight = "bold",
+              fontSize = 15,
+              lineHeight = 50
+            )
+          ) %>%
+          echarts4r::e_z_axis_3d(
+            name = paste0("PC3 - ", pca_var_perc[3], " %"),
+            nameLocation = "center",
+            nameTextStyle = list(
+              fontWeight = "bold",
+              fontSize = 15,
+              lineHeight = 50
+            )
+          ) %>%
+          echarts4r::e_legend() %>% 
+          echarts4r::e_color(self$color_palette) %>% 
+          echarts4r::e_toolbox_feature(feature = c("saveAsImage", "restore"))
+      }
+      
+      return(p)
+    
 ```
+
+```{r PCA}
+mat <- imputed_data %>% 
+  dplyr::select(gene_names, label, intensity) %>%
+  tidyr::pivot_wider(id_cols = "gene_names",
+                     names_from = "label",
+                     values_from = "intensity") %>%
+  tibble::column_to_rownames("gene_names") %>%
+  as.matrix()
+      
+## perform PCA
+
+pca <- prcomp(t(mat), center = TRUE, scale = TRUE) 
+      
+## calculate percentage of each PC
+pca_var <- pca$sdev^2
+pca_var_perc <- round(pca_var/sum(pca_var)*100, 1)
+      
+## create a data.frame for the first 3 PC
+pca_table <- data.frame(label = rownames(pca$x),
+                        x = pca$x[, 1],
+                        y = pca$x[, 2],
+                        z = pca$x[, 3]) %>% 
+  dplyr::left_join(expdesign, by = "label") 
+      
+## generate plot
+if(!view_3d){
+        p <- pca_table %>%
+          dplyr::group_by(condition) %>%
+          echarts4r::e_chart(x, renderer = "svg") %>%
+          echarts4r::e_scatter(y, symbol_size = c(10, 10), bind = replicate) %>%
+          echarts4r::e_tooltip(
+            trigger = "item",
+            formatter = htmlwidgets::JS("function(params){return('Rep: ' + params.name);}")
+          ) %>%
+          echarts4r::e_title(text = "PCA", subtext = "Principal component analysis") %>%
+          echarts4r::e_x_axis(
+            name = paste0("PC1 - ", pca_var_perc[1], " %"),
+            nameLocation = "center",
+            nameTextStyle = list(
+              fontWeight = "bold",
+              fontSize = 15,
+              lineHeight = 50
+            )
+          ) %>%
+          echarts4r::e_y_axis(
+            name = paste0("PC2 - ", pca_var_perc[2], " %"),
+            nameLocation = "center",
+            nameTextStyle = list(
+              fontWeight = "bold",
+              fontSize = 15,
+              lineHeight = 50
+            )
+          ) %>% 
+          echarts4r::e_color(self$color_palette) %>% 
+          echarts4r::e_toolbox_feature(feature = c("saveAsImage", "restore", "dataView"))
+      }else{
+        p <- pca_table %>%
+          dplyr::group_by(condition) %>%
+          echarts4r::e_chart(x) %>%
+          echarts4r::e_scatter_3d(y, z, symbol_size = c(10, 10), bind = replicate) %>%
+          echarts4r::e_tooltip(
+            trigger = "item",
+            formatter = htmlwidgets::JS("
+        function(params){
+          return('Rep: ' + params.name);
+        }
+      ")
+          ) %>%
+          echarts4r::e_title(text = "PCA", subtext = "Principal component analysis") %>%
+          echarts4r::e_x_axis_3d(
+            name = paste0("PC1 - ", pca_var_perc[1], " %"),
+            nameLocation = "center",
+            nameTextStyle = list(
+              fontWeight = "bold",
+              fontSize = 15,
+              lineHeight = 50
+            )
+          ) %>%
+          echarts4r::e_y_axis_3d(
+            name = paste0("PC2 - ", pca_var_perc[2], " %"),
+            nameLocation = "center",
+            nameTextStyle = list(
+              fontWeight = "bold",
+              fontSize = 15,
+              lineHeight = 50
+            )
+          ) %>%
+          echarts4r::e_z_axis_3d(
+            name = paste0("PC3 - ", pca_var_perc[3], " %"),
+            nameLocation = "center",
+            nameTextStyle = list(
+              fontWeight = "bold",
+              fontSize = 15,
+              lineHeight = 50
+            )
+          ) %>%
+          echarts4r::e_legend() %>% 
+          echarts4r::e_color(self$color_palette) %>% 
+          echarts4r::e_toolbox_feature(feature = c("saveAsImage", "restore"))
+      }
+      
+      return(p)
+    }
+
+```
+
 
 # statistics
 
