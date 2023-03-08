@@ -622,24 +622,24 @@ raw_matrix <- filtered_data %>%
 # norm_matrix <- vsn::predict(vsn_fit, 2 ^ raw_matrix)
         
 ## return a table with QProMS object format
-normalized_data <- norm_matrix %>%
-  tibble::as_tibble(rownames = "gene_names") %>% 
-  tidyr::pivot_longer(cols = !gene_names,
-                      names_to = "label",
-                      values_to = "norm_intensity") %>% 
-  dplyr::full_join(filtered_data, by = c("gene_names", "label"), copy=TRUE) %>%
-  dplyr::mutate(intensity = norm_intensity) %>% 
-  dplyr::select(-norm_intensity) %>% 
-  dplyr::relocate(intensity, .after = last_col()) %>% 
-  dplyr::mutate(intensity = round(intensity, 2)) %>% 
-  dplyr::group_by(condition, label)
+# normalized_data <- norm_matrix %>%
+#   tibble::as_tibble(rownames = "gene_names") %>% 
+#   tidyr::pivot_longer(cols = !gene_names,
+#                       names_to = "label",
+#                       values_to = "norm_intensity") %>% 
+#   dplyr::full_join(filtered_data, by = c("gene_names", "label"), copy=TRUE) %>%
+#   dplyr::mutate(intensity = norm_intensity) %>% 
+#   dplyr::select(-norm_intensity) %>% 
+#   dplyr::relocate(intensity, .after = last_col()) %>% 
+#   dplyr::mutate(intensity = round(intensity, 2)) %>% 
+#   dplyr::group_by(condition, label)
         
 #NB: in questo caso i dati erano normalizzati, quindi filtered_data e normalized_data sono uguali
 ```
 
 ```{r Plot normalized data distribution static}
      
-ggplot(normalized_data, aes(x=label, y=intensity, fill=condition))+
+ggplot(filtered_data, aes(x=label, y=intensity, fill=condition))+
   geom_boxplot(width=0.5, color="black")+
   scale_fill_manual(values = color_palette)+
   theme_minimal()+
@@ -830,7 +830,7 @@ p4 <- filtered_data %>%
   dplyr::group_by(missing_value)
 
 ggplot(p4,aes(x= mean, color=missing_value))+
-  geom_density(lwd=0.8)+
+  geom_density(size=0.8)+
   scale_color_manual(values = c("#481567FF", "#21908CFF"))+
   theme_minimal()+
   theme(plot.title = element_text(hjust = 0.5, size = 18), 
@@ -870,66 +870,7 @@ r6$plot_imputation()
 ```
 
 ```{r Plot imputation static}
-    imputation = function(imp_methods = "mixed", shift = 1.8, scale = 0.3, unique_visual = FALSE) {
-      
-      # store inputs for summary table
-      self$imp_methods <- imp_methods
-      
-      # Define if use normalize or row intensity
-      if(self$is_norm){
-        data <- self$normalized_data
-      }else{
-        data <- self$filtered_data
-      }
-      
-      if(imp_methods == "mixed"){
-        self$is_mixed <- TRUE
-      }else{
-        self$is_mixed <- FALSE
-      }
-      
-      if(imp_methods == "mixed" | imp_methods == "perseus"){
-        self$is_imp <- TRUE
-        
-        if(self$is_mixed){
-          data_mixed <- data %>%
-            dplyr::group_by(gene_names, condition) %>%
-            dplyr::mutate(for_mean_imp = dplyr::if_else((sum(bin_intensity) / dplyr::n()) >= 0.75, TRUE, FALSE)) %>%
-            dplyr::mutate(mean_grp = mean(intensity, na.rm = TRUE)) %>%
-            dplyr::ungroup() %>%
-            dplyr::mutate(imp_intensity = dplyr::case_when(
-              bin_intensity == 0 & for_mean_imp ~ mean_grp,
-              TRUE ~ as.numeric(intensity))) %>%
-            dplyr::mutate(intensity = imp_intensity) %>% 
-            dplyr::select(-c(for_mean_imp, mean_grp, imp_intensity))
-          
-          data <- data_mixed
-        }
-        
-        # if(unique_visual){
-        #   data_unique <- data %>%
-        #     dplyr::group_by(gene_names, condition) %>%
-        #     dplyr::mutate(miss_val = dplyr::n() - sum(bin_intensity)) %>%
-        #     dplyr::mutate(n_size = dplyr::n()) %>%
-        #     dplyr::ungroup() %>%
-        #     dplyr::group_by(gene_names) %>%
-        #     dplyr::filter(any(miss_val <= 0)) %>%
-        #     dplyr::ungroup() %>%
-        #     dplyr::filter(miss_val == n_size) %>% 
-        #     dplyr::mutate(intensity = min(data$intensity, na.rm = TRUE), unique = TRUE) %>% 
-        #     dplyr::select(-c(bin_intensity, miss_val, n_size)) %>% 
-        #     dplyr::rename(unique_intensity = intensity) 
-        #   
-        #   data <- data %>% 
-        #     dplyr::left_join(data_unique, by = c("gene_names", "label", "condition", "replicate")) %>% 
-        #     dplyr::mutate(unique = if_else(is.na(unique), FALSE, unique)) %>% 
-        #     dplyr::mutate(intensity = if_else(unique, unique_intensity, intensity)) %>% 
-        #     dplyr::mutate(bin_intensity = if_else(unique, 1, bin_intensity)) %>% 
-        #     dplyr::select(-c(unique_intensity, unique)) 
-        # }
-        ## this funcion perform classical Perseus imputation
-        ## sice use random nomral distibution i will set a set.seed()
-        set.seed(11)
+    
         
         imputed_data <- data %>%
           dplyr::group_by(label) %>%
@@ -1001,7 +942,7 @@ ggplot(imputed_data, aes(x=intensity, color=condition))+
         axis.title.y = element_text(size = 15),
         axis.text.x = element_text(size=10),
         axis.text.y = element_text(size = 10))+
-  labs(title= "Imputation plot", x="Intensity", y="")
+  labs(title= "Imputation plot", x="Intensity", y="Density")
 ```
 
 # Correlation plot
@@ -1226,87 +1167,23 @@ pca_table <- data.frame(label = rownames(pca$x),
                         x = pca$x[, 1],
                         y = pca$x[, 2],
                         z = pca$x[, 3]) %>% 
-  dplyr::left_join(expdesign, by = "label") 
+  dplyr::left_join(expdesign, by = "label") %>% 
+  group_by(condition)
       
 ## generate plot
-if(!view_3d){
-        p <- pca_table %>%
-          dplyr::group_by(condition) %>%
-          echarts4r::e_chart(x, renderer = "svg") %>%
-          echarts4r::e_scatter(y, symbol_size = c(10, 10), bind = replicate) %>%
-          echarts4r::e_tooltip(
-            trigger = "item",
-            formatter = htmlwidgets::JS("function(params){return('Rep: ' + params.name);}")
-          ) %>%
-          echarts4r::e_title(text = "PCA", subtext = "Principal component analysis") %>%
-          echarts4r::e_x_axis(
-            name = paste0("PC1 - ", pca_var_perc[1], " %"),
-            nameLocation = "center",
-            nameTextStyle = list(
-              fontWeight = "bold",
-              fontSize = 15,
-              lineHeight = 50
-            )
-          ) %>%
-          echarts4r::e_y_axis(
-            name = paste0("PC2 - ", pca_var_perc[2], " %"),
-            nameLocation = "center",
-            nameTextStyle = list(
-              fontWeight = "bold",
-              fontSize = 15,
-              lineHeight = 50
-            )
-          ) %>% 
-          echarts4r::e_color(self$color_palette) %>% 
-          echarts4r::e_toolbox_feature(feature = c("saveAsImage", "restore", "dataView"))
-      }else{
-        p <- pca_table %>%
-          dplyr::group_by(condition) %>%
-          echarts4r::e_chart(x) %>%
-          echarts4r::e_scatter_3d(y, z, symbol_size = c(10, 10), bind = replicate) %>%
-          echarts4r::e_tooltip(
-            trigger = "item",
-            formatter = htmlwidgets::JS("
-        function(params){
-          return('Rep: ' + params.name);
-        }
-      ")
-          ) %>%
-          echarts4r::e_title(text = "PCA", subtext = "Principal component analysis") %>%
-          echarts4r::e_x_axis_3d(
-            name = paste0("PC1 - ", pca_var_perc[1], " %"),
-            nameLocation = "center",
-            nameTextStyle = list(
-              fontWeight = "bold",
-              fontSize = 15,
-              lineHeight = 50
-            )
-          ) %>%
-          echarts4r::e_y_axis_3d(
-            name = paste0("PC2 - ", pca_var_perc[2], " %"),
-            nameLocation = "center",
-            nameTextStyle = list(
-              fontWeight = "bold",
-              fontSize = 15,
-              lineHeight = 50
-            )
-          ) %>%
-          echarts4r::e_z_axis_3d(
-            name = paste0("PC3 - ", pca_var_perc[3], " %"),
-            nameLocation = "center",
-            nameTextStyle = list(
-              fontWeight = "bold",
-              fontSize = 15,
-              lineHeight = 50
-            )
-          ) %>%
-          echarts4r::e_legend() %>% 
-          echarts4r::e_color(self$color_palette) %>% 
-          echarts4r::e_toolbox_feature(feature = c("saveAsImage", "restore"))
-      }
-      
-      return(p)
-    }
+
+ggplot(pca_table, aes(x=x, y=y),group=condition)+
+  geom_point(size=3, shape=19, aes(color=condition))+
+  theme_minimal()+
+  geom_hline(yintercept = 0, linetype="longdash")+
+  geom_vline(xintercept = 0, linetype="longdash")+
+  scale_color_manual(values = c("#43BF71FF", "#21908CFF", "#35608DFF"))+
+  theme(plot.title = element_text(hjust = 0.5, size = 18),
+        legend.position = 'right',
+        axis.title.x = element_text(size = 15),
+        axis.title.y = element_text(size = 15),
+        axis.text = element_text(size = 10))+
+  labs(title="PCA", subtitle = "Principal component analysis", x="PC1", y="PC2")
 
 ```
 
