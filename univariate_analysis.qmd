@@ -124,7 +124,7 @@ peptides = peptides column
 unique = unique columns
 razor = razor and unique column
 
-gli ultimi 3 filtano via (con TRUE) i potential contaminant, gli only identify by side e i reverse
+gli ultimi 3 filtrano via (con TRUE) i potential contaminant, gli only identify by side e i reverse
 
 ```{r data-wrangling}
 r6$pg_preprocessing()
@@ -148,7 +148,7 @@ r6$data_wrangling(
       ### this first part remove duplicate and missing gene names
       ### in proteinGroups.txt input
       
-      ## Indentify all duplicate gene names 
+      ## Identify all duplicate gene names 
       ## and add after __ the protein iD
       
       
@@ -1155,27 +1155,6 @@ ggplot(pca_table, aes(x=x, y=y),group=condition)+
   labs(title="PCA", subtitle = "Principal component analysis", x="PC1", y="PC2")+
   geom_text(aes(label=replicate), size=3, position = "dodge", hjust=1.5)
 
-
-library(plotly)
-
-plot_ly(data=pca_table, x='x', y='y', z='z', color='condition', colors = c("#43BF71FF", "#21908CFF", "#35608DFF"))
-
-
-
-ggplot(pca_table, aes(x=x, y=y, z=z),group=condition)+
-  geom_point(size=3, shape=19, aes(color=condition))+
-  theme_minimal()+
-  geom_hline(yintercept = 0, linetype="longdash")+
-  geom_vline(xintercept = 0, linetype="longdash")+
-  scale_color_manual(values = c("#43BF71FF", "#21908CFF", "#35608DFF"))+
-  theme(plot.title = element_text(hjust = 0.5, size = 18),
-        legend.position = 'right',
-        axis.title.x = element_text(size = 15),
-        axis.title.y = element_text(size = 15),
-        axis.text = element_text(size = 10))+
-  labs(title="PCA", subtitle = "Principal component analysis", x="PC1", y="PC2")+
-  geom_text(aes(label=replicate), size=3, position = "dodge", hjust=1.5)
-
 ```
 
 
@@ -1207,6 +1186,58 @@ r6$stat_t_test(
   fc = 1,
   alpha = 0.05
 )
+
+
+stat_t_test_single = function(data, test, fc, alpha, p_adj_method, ...){
+      
+      cond_1 <- stringr::str_split(test, "_vs_")[[1]][1]
+      cond_2 <- stringr::str_split(test, "_vs_")[[1]][2]
+      
+      self$univariate <- TRUE
+      self$fold_change <- fc
+      
+      mat <- data %>%
+        dplyr::filter(condition == cond_1 | condition == cond_2) %>%
+        dplyr::mutate(label_test = paste(condition, replicate, sep = "_")) %>%
+        tidyr::pivot_wider(id_cols = "gene_names",
+                           names_from = "label_test",
+                           values_from = "intensity") %>%
+        tibble::column_to_rownames("gene_names") %>%
+        dplyr::relocate(dplyr::contains(cond_2), .after = dplyr::last_col()) %>%
+        na.omit() %>% 
+        as.matrix()
+      
+      a <- grep(cond_1, colnames(mat))
+      b <- grep(cond_2, colnames(mat))
+      
+      p_values_vec <- apply(mat, 1, function(x) t.test(x[a], x[b], ...)$p.value)
+      
+      p_values <- p_values_vec %>%
+        as_tibble(rownames = NA) %>%
+        tibble::rownames_to_column(var = "gene_names") %>%
+        dplyr::rename(p_val = value)
+      
+      fold_change <- apply(mat, 1, function(x) mean(x[a]) - mean(x[b])) %>% #metterlo in log2?
+        as_tibble(rownames = NA) %>%
+        tibble::rownames_to_column(var = "gene_names") %>%
+        dplyr::rename(fold_change = value)
+      
+      p_ajusted <- p.adjust(p_values_vec, method = p_adj_method) %>% 
+        as_tibble(rownames = NA) %>%
+        tibble::rownames_to_column(var = "gene_names") %>%
+        dplyr::rename(p_adj = value)
+      
+      stat_data <- fold_change %>% 
+        dplyr::full_join(., p_values, by = "gene_names") %>% 
+        dplyr::full_join(., p_ajusted, by = "gene_names") %>% 
+        dplyr::mutate(significant = dplyr::if_else(abs(fold_change) >= fc & p_adj <= alpha, TRUE, FALSE)) %>% 
+        dplyr::rename(!!paste0(cond_1, "_vs_", cond_2, "_significant") := significant) %>% 
+        dplyr::rename(!!paste0(cond_1, "_vs_", cond_2, "_p_val") := p_val) %>% 
+        dplyr::rename(!!paste0(cond_1, "_vs_", cond_2, "_fold_change") := fold_change) %>% 
+        dplyr::rename(!!paste0(cond_1, "_vs_", cond_2, "_p_adj") := p_adj)
+      
+      return(stat_data)
+    }
 ```
 
 per vedere la tabella risultate per adesso non ho creato una funzione, ma ecco come visualizzarla:
