@@ -99,55 +99,6 @@ exp_des <- exp_design(data=raw_data, pattern_interest = "lfq_intensity_bc_")
 ```
 
 
-```{r Pre_processing}
-pre_process <- function(data, pattern_interest){
-  preprocess <- data %>% 
-    dplyr::mutate(dplyr::across(dplyr::starts_with(pattern_interest), ~ log2(.))) %>%
-    dplyr::mutate(dplyr::across(dplyr::starts_with(pattern_interest), ~ dplyr::na_if(.,-Inf)))
-    dplyr::select(protein_i_ds, gene_names, id) %>%
-    dplyr::mutate(gene_names = stringr::str_extract(gene_names, "[^;]*")) %>% 
-    dplyr::rename(unique_gene_names = gene_names) %>% ## every protein groups now have only 1 gene name associated to it
-    janitor::get_dupes(unique_gene_names) %>%
-    dplyr::mutate(unique_gene_names = dplyr::case_when(
-    unique_gene_names != "" ~ paste0(
-    unique_gene_names, "__",
-    stringr::str_extract(protein_i_ds, "[^;]*")),
-    TRUE ~ stringr::str_extract(protein_i_ds, "[^;]*"))) %>%
-    dplyr::select(unique_gene_names, id) %>%
-    dplyr::right_join(data, by = "id") %>%
-    dplyr::mutate(
-    gene_names = dplyr::case_when(unique_gene_names != "" ~ unique_gene_names,
-                                  TRUE ~ gene_names)) %>%
-    dplyr::select(-unique_gene_names) %>%
-    dplyr::mutate(gene_names = dplyr::if_else(gene_names == "",
-                                              stringr::str_extract(protein_i_ds, "[^;]*"),
-                                              gene_names)) %>%
-    dplyr::mutate(gene_names = stringr::str_extract(gene_names, "[^;]*")) %>% 
-    dplyr::select(gene_names, 
-                  dplyr::all_of(exp_des$key),
-                  peptides,
-                  razor_unique_peptides,
-                  unique_peptides,
-                  reverse,
-                  potential_contaminant,
-                  only_identified_by_site) %>% 
-    tidyr::pivot_longer(!c(gene_names,
-                           peptides,
-                           razor_unique_peptides,
-                           unique_peptides,
-                           reverse,
-                           potential_contaminant,
-                           only_identified_by_site),
-                        names_to = "key",
-                        values_to = "raw_intensity") %>% 
-    dplyr::inner_join(., exp_des, by = "key") %>%   #aggiunge righe e colonne che matchano tra expdesign e data
-    dplyr::mutate(bin_intensity = dplyr::if_else(is.na(raw_intensity), 0, 1)) %>%  #Creo nuova colonna. 1 se valore esite, 0 se NA
-    dplyr::select(-key)
-    
-}
-
-standardized_data <- pre_process(data = raw_data, pattern_interest="lfq_intensity_bc_" )
-```
 
 # Data Wrangling
 
