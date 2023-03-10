@@ -100,8 +100,10 @@ exp_des <- exp_design(data=raw_data, pattern_interest = "lfq_intensity_bc_")
 
 
 ```{r Pre_processing}
-pre_process <- function(data){
+pre_process <- function(data, pattern_interest){
   preprocess <- data %>% 
+    dplyr::mutate(dplyr::across(dplyr::starts_with(pattern_interest), ~ log2(.))) %>%
+    dplyr::mutate(dplyr::across(dplyr::starts_with(pattern_interest), ~ dplyr::na_if(.,-Inf)))
     dplyr::select(protein_i_ds, gene_names, id) %>%
     dplyr::mutate(gene_names = stringr::str_extract(gene_names, "[^;]*")) %>% 
     dplyr::rename(unique_gene_names = gene_names) %>% ## every protein groups now have only 1 gene name associated to it
@@ -144,7 +146,7 @@ pre_process <- function(data){
     
 }
 
-standardized_data <- pre_process(data = raw_data)
+standardized_data <- pre_process(data = raw_data, pattern_interest="lfq_intensity_bc_" )
 ```
 
 # Data Wrangling
