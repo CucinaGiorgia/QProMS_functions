@@ -49,19 +49,15 @@ caricare il proteinGroups.txt, inserire il path completo.
 Scopo della funzione: caricare il file e modificarlo (rimuovere gli spazi e i caratteri che potrebbero creare problemi nell'analisi)
 
 ```{r loading-data}
-r6$loading_data(
-  input_path = here::here("proteinGroups.txt"),
-  input_type = "max_quant"
-)
 
-# loading_data <- function(input_path, input_type){
-      
-raw_data <- data.table::fread(input = here::here("proteinGroups.txt")) %>% #Carica file 
-tibble::as_tibble(.name_repair = janitor::make_clean_names) #Modifica file: il nome delle colonne senza spazi e con minuscolo
-      
-input_type <-  "max_quant"
+loading_data <- function(file_path){
+  raw_data <- data.table::fread(file_path) %>% #Carica file
+    tibble::as.tibble(.name_repair=janitor::make_clean_names) #Modifica file: il nome delle colonne senza spazi e con minuscolo
+  return(raw_data)
+}
 
-    # }
+raw_data <- loading_data(file_path = here::here("proteinGroups.txt"))
+
 ```
 
 Questa funzione crea l'experimental design, ma il proteinGroups.txt deve essere creato con la colonna experiment in MaxQuant impostata come:
@@ -85,28 +81,29 @@ Con lo stesso apporccio si creano altre due colonne: condition e replicate.
 
 
 ```{r make-expdesig}
-r6$make_expdesign(
-  start_with = "lfq_intensity_bc_"
-)
+#Creo table exp_des
+exp_design <- function(pattern_interest){
+  exp_des <- raw_data %>% 
+    dplyr::mutate(dplyr::across(dplyr::starts_with(pattern_interest),  ~ log2(.) )) %>% #Vslori intensity in log2
+    dplyr::select(gene_names, dplyr::starts_with(pattern_interest)) %>% #Tolte tutte le colonne, tranne le due in ()
+    tidyr::pivot_longer(!gene_names, names_to="key", values_to= "intensity") %>% #Raggruppa tutte le lfq in unica colonna
+    dplyr::mutate(label = stringr::str_remove(key, "lfq_intensity_bc_")) %>%
+    dplyr::mutate(condition = stringr::str_remove(label, "_[^_]*$")) %>%
+    dplyr::mutate(replicate = stringr::str_remove(label, ".*_")) %>% 
+    dplyr::na_if(., -Inf) #Se le intensity sono -Inf diventano NA
+}
 
-# make_expdesign <- function(start_with = "lfq_intensity_"){
-      ## qui mettere tutti gli if in base all'intensity type
-      
-intensity_type <- "lfq_intensity_bc_"
-      
-data <- raw_data %>% 
-        dplyr::mutate(dplyr::across(dplyr::starts_with("lfq_intensity_bc_"), ~ log2(.))) %>%
-        dplyr::mutate(dplyr::across(dplyr::starts_with("lfq_intensity_bc_"), ~ dplyr::na_if(.,-Inf)))
-      
-expdesign <- data %>%
-  dplyr::select(gene_names, dplyr::starts_with("lfq_intensity_bc_")) %>%
-  tidyr::pivot_longer(!gene_names, names_to = "key", values_to = "intensity") %>%
-  dplyr::distinct(key) %>%
-  dplyr::mutate(label = stringr::str_remove(key, "lfq_intensity_bc_")) %>%
-  dplyr::mutate(condition = stringr::str_remove(label, "_[^_]*$")) %>%
-  dplyr::mutate(replicate = stringr::str_remove(label, ".*_"))
-      
-    # }
+exp_des <- exp_design(pattern_interest = "lfq_intensity_bc_")
+```
+
+
+```{r Pre_processing}
+pre_process <- function(){
+  preprocess <- rawdata %>% 
+    dplyr::select(protein_i_ds, gene_names, id) %>%
+    dplyr::mutate(gene_names = stringr::str_extract(gene_names, "[^;]*"))
+    
+}
 ```
 
 # Data Wrangling
@@ -387,7 +384,7 @@ p <- filtered_data %>%
 ggplot(p,aes(x= label, y= counts, fill=condition))+
   geom_bar(stat="identity", width = 0.6, color="black")+
   scale_fill_manual(values = color_palette)+
-  theme_minimal()+
+  theme_cuc()+
   theme(plot.title = element_text(hjust = 0.5, size = 18), 
         legend.position = 'right',
         axis.title.x = element_text(size=15),
