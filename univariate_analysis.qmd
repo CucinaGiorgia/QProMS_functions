@@ -41,6 +41,8 @@ library(corrmorant)
 
 source(file = here::here("r6class_app.R"))
 
+source(file = "C:/Users/MSU/Documents/GC/Analysis/theme_ggplot_test.R")
+
 # generare l'oggetto
 r6 <- QProMS$new()
 ```
@@ -82,8 +84,8 @@ Con lo stesso apporccio si creano altre due colonne: condition e replicate.
 
 ```{r make-expdesig}
 #Creo table exp_des
-exp_design <- function(pattern_interest){
-  exp_des <- raw_data %>% 
+exp_design <- function(data, pattern_interest){
+  exp_des <- data %>% 
     dplyr::mutate(dplyr::across(dplyr::starts_with(pattern_interest),  ~ log2(.) )) %>% #Vslori intensity in log2
     dplyr::select(gene_names, dplyr::starts_with(pattern_interest)) %>% #Tolte tutte le colonne, tranne le due in ()
     tidyr::pivot_longer(!gene_names, names_to="key", values_to= "intensity") %>% #Raggruppa tutte le lfq in unica colonna
@@ -93,17 +95,56 @@ exp_design <- function(pattern_interest){
     dplyr::na_if(., -Inf) #Se le intensity sono -Inf diventano NA
 }
 
-exp_des <- exp_design(pattern_interest = "lfq_intensity_bc_")
+exp_des <- exp_design(data=raw_data, pattern_interest = "lfq_intensity_bc_")
 ```
 
 
 ```{r Pre_processing}
-pre_process <- function(){
-  preprocess <- rawdata %>% 
+pre_process <- function(data){
+  preprocess <- data %>% 
     dplyr::select(protein_i_ds, gene_names, id) %>%
-    dplyr::mutate(gene_names = stringr::str_extract(gene_names, "[^;]*"))
+    dplyr::mutate(gene_names = stringr::str_extract(gene_names, "[^;]*")) %>% 
+    dplyr::rename(unique_gene_names = gene_names) %>% ## every protein groups now have only 1 gene name associated to it
+    janitor::get_dupes(unique_gene_names) %>%
+    dplyr::mutate(unique_gene_names = dplyr::case_when(
+    unique_gene_names != "" ~ paste0(
+    unique_gene_names, "__",
+    stringr::str_extract(protein_i_ds, "[^;]*")),
+    TRUE ~ stringr::str_extract(protein_i_ds, "[^;]*"))) %>%
+    dplyr::select(unique_gene_names, id) %>%
+    dplyr::right_join(data, by = "id") %>%
+    dplyr::mutate(
+    gene_names = dplyr::case_when(unique_gene_names != "" ~ unique_gene_names,
+                                  TRUE ~ gene_names)) %>%
+    dplyr::select(-unique_gene_names) %>%
+    dplyr::mutate(gene_names = dplyr::if_else(gene_names == "",
+                                              stringr::str_extract(protein_i_ds, "[^;]*"),
+                                              gene_names)) %>%
+    dplyr::mutate(gene_names = stringr::str_extract(gene_names, "[^;]*")) %>% 
+    dplyr::select(gene_names, 
+                  dplyr::all_of(exp_des$key),
+                  peptides,
+                  razor_unique_peptides,
+                  unique_peptides,
+                  reverse,
+                  potential_contaminant,
+                  only_identified_by_site) %>% 
+    tidyr::pivot_longer(!c(gene_names,
+                           peptides,
+                           razor_unique_peptides,
+                           unique_peptides,
+                           reverse,
+                           potential_contaminant,
+                           only_identified_by_site),
+                        names_to = "key",
+                        values_to = "raw_intensity") %>% 
+    dplyr::inner_join(., exp_des, by = "key") %>%   #aggiunge righe e colonne che matchano tra expdesign e data
+    dplyr::mutate(bin_intensity = dplyr::if_else(is.na(raw_intensity), 0, 1)) %>%  #Creo nuova colonna. 1 se valore esite, 0 se NA
+    dplyr::select(-key)
     
 }
+
+standardized_data <- pre_process(data = raw_data)
 ```
 
 # Data Wrangling
@@ -382,7 +423,7 @@ p <- filtered_data %>%
       
        
 ggplot(p,aes(x= label, y= counts, fill=condition))+
-  geom_bar(stat="identity", width = 0.6, color="black")+
+  geom_bar(stat="identity", width = width_boxplot, color="black")+
   scale_fill_manual(values = color_palette)+
   theme_cuc()+
   theme(plot.title = element_text(hjust = 0.5, size = 18), 
@@ -396,7 +437,9 @@ ggplot(p,aes(x= label, y= counts, fill=condition))+
 
 
   #geom_label(aes(label=counts), fill="white", vjust=-0.2, size=4, fontface="bold")
-
+plotx <- function(data, width_boxplot = 0.6)
+  
+  plotx(data = data_filtered, width_boxplot = 0.9)
              
 ```
 

@@ -1,0 +1,62 @@
+---
+title: "New Univariate Analysis"
+format: html
+editor: visual
+---
+
+
+
+# Libraries loading and sources
+
+```{r loading-libreries, echo=FALSE}
+library(data.table)
+library(janitor)
+library(here)
+library(dplyr)
+library(stringr)
+library(echarts4r)
+library(reactable)
+library(htmltools)
+library(ComplexHeatmap)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(gt)
+library(visNetwork)
+library(ggplot2)
+library(vsn)
+library(corrmorant)
+
+source(file = here::here("r6class_app.R"))
+
+source(file = "C:/Users/MSU/Documents/GC/Analysis/theme_ggplot_test.R")
+```
+
+#Loading raw data
+
+```{r loading-data}
+
+loading_data <- function(file_path){
+  raw_data <- data.table::fread(file_path) %>% #Carica file
+    tibble::as.tibble(.name_repair=janitor::make_clean_names) #Modifica file: il nome delle colonne senza spazi e con minuscolo
+  return(raw_data)
+}
+
+raw_data <- loading_data(file_path = here::here("proteinGroups.txt"))
+
+```
+
+```{r make-expdesig}
+#Creo table exp_des
+exp_design <- function(data, pattern_interest){
+  exp_des <- data %>% 
+    dplyr::mutate(dplyr::across(dplyr::starts_with(pattern_interest),  ~ log2(.) )) %>% #Vslori intensity in log2
+    dplyr::select(gene_names, dplyr::starts_with(pattern_interest)) %>% #Tolte tutte le colonne, tranne le due in ()
+    tidyr::pivot_longer(!gene_names, names_to="key", values_to= "intensity") %>% #Raggruppa tutte le lfq in unica colonna
+    dplyr::mutate(label = stringr::str_remove(key, "lfq_intensity_bc_")) %>%
+    dplyr::mutate(condition = stringr::str_remove(label, "_[^_]*$")) %>%
+    dplyr::mutate(replicate = stringr::str_remove(label, ".*_")) %>% 
+    dplyr::na_if(., -Inf) #Se le intensity sono -Inf diventano NA
+}
+
+exp_des <- exp_design(data=raw_data, pattern_interest = "lfq_intensity_bc_")
+```
