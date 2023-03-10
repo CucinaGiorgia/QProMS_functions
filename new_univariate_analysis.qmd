@@ -49,13 +49,12 @@ raw_data <- loading_data(file_path = here::here("proteinGroups.txt"))
 #Creo table exp_des
 exp_design <- function(data, pattern_interest){
   exp_des <- data %>% 
-    dplyr::mutate(dplyr::across(dplyr::starts_with(pattern_interest),  ~ log2(.) )) %>% #Vslori intensity in log2
-    dplyr::select(gene_names, dplyr::starts_with(pattern_interest)) %>% #Tolte tutte le colonne, tranne le due in ()
+    dplyr::select(gene_names, dplyr::starts_with(pattern_interest)) %>%
     tidyr::pivot_longer(!gene_names, names_to="key", values_to= "intensity") %>% #Raggruppa tutte le lfq in unica colonna
+    dplyr::distinct(key) %>%
     dplyr::mutate(label = stringr::str_remove(key, "lfq_intensity_bc_")) %>%
     dplyr::mutate(condition = stringr::str_remove(label, "_[^_]*$")) %>%
-    dplyr::mutate(replicate = stringr::str_remove(label, ".*_")) %>% 
-    dplyr::na_if(., -Inf) #Se le intensity sono -Inf diventano NA
+    dplyr::mutate(replicate = stringr::str_remove(label, ".*_"))
 }
 
 exp_des <- exp_design(data=raw_data, pattern_interest = "lfq_intensity_bc_")
@@ -64,11 +63,10 @@ exp_des <- exp_design(data=raw_data, pattern_interest = "lfq_intensity_bc_")
 ```{r Data preprocessing and wrangling/Data filtered}
 pre_process <- function(data, pattern_interest){
   dplyr::mutate(dplyr::across(dplyr::starts_with(pattern_interest), ~ log2(.))) %>%
-    dplyr::mutate(dplyr::across(dplyr::starts_with(self$intensity_type), ~ dplyr::na_if(.,-Inf)))
+    dplyr::mutate(dplyr::across(dplyr::starts_with(pattern_interest), ~ dplyr::na_if(.,-Inf)))
 }
 
-data_wrangling <- pre_process(data=raw_data, pattern_interest = "lfq_intensity_bc_") %>% 
-  function(data, 
+data_wrangling <- function(data,
            valid_val_filter, 
            valid_val_thr, 
            pep_filter, 
@@ -76,9 +74,9 @@ data_wrangling <- pre_process(data=raw_data, pattern_interest = "lfq_intensity_b
            rev,
            cont,
            oibs){
-    data %>% 
-  dplyr::select(protein_i_ds, gene_names, id) %>%
-  dplyr::mutate(gene_names = stringr::str_extract(gene_names, "[^;]*")) %>%
+    data <- data %>% 
+      dplyr::select(protein_i_ds, gene_names, id) %>%
+      dplyr::mutate(gene_names = stringr::str_extract(gene_names, "[^;]*")) %>%
  ## every protein groups now have only 1 gene name associated to it
   dplyr::rename(unique_gene_names = gene_names) %>%
   janitor::get_dupes(unique_gene_names) %>%
@@ -86,46 +84,74 @@ data_wrangling <- pre_process(data=raw_data, pattern_interest = "lfq_intensity_b
   unique_gene_names != "" ~ paste0(
   unique_gene_names, "__",
   stringr::str_extract(protein_i_ds, "[^;]*")),
-   TRUE ~ stringr::str_extract(protein_i_ds, "[^;]*")
-           )) %>%
-        dplyr::select(unique_gene_names, id) %>%
-        dplyr::right_join(data, by = "id") %>%
-        dplyr::mutate(
-          gene_names = dplyr::case_when(unique_gene_names != "" ~ unique_gene_names,
-                                        TRUE ~ gene_names)
-        ) %>%
-        dplyr::select(-unique_gene_names) %>%
-        dplyr::mutate(gene_names = dplyr::if_else(
-          gene_names == "",
-          stringr::str_extract(protein_i_ds, "[^;]*"),
-          gene_names
-        )) %>%
-        dplyr::mutate(gene_names = stringr::str_extract(gene_names, "[^;]*")) %>% 
-        dplyr::select(
-          gene_names,
-          dplyr::all_of(expdesign$key),
-          peptides,
-          razor_unique_peptides,
-          unique_peptides,
-          reverse,
-          potential_contaminant,
-          only_identified_by_site
-        ) %>% 
-        tidyr::pivot_longer(
-          !c(gene_names,
-             peptides,
-             razor_unique_peptides,
-             unique_peptides,
-             reverse,
-             potential_contaminant,
-             only_identified_by_site),
+  TRUE ~ stringr::str_extract(protein_i_ds, "[^;]*"))) %>%
+      dplyr::select(unique_gene_names, id) %>%
+      dplyr::right_join(data, by = "id") %>%
+      dplyr::mutate(gene_names = dplyr::case_when(unique_gene_names != "" ~ unique_gene_names,
+                                        TRUE ~ gene_names)) %>%
+      dplyr::select(-unique_gene_names) %>%
+      dplyr::mutate(gene_names = dplyr::if_else(gene_names == "",
+                                                stringr::str_extract(protein_i_ds, "[^;]*"),
+                                                gene_names)) %>%
+      dplyr::mutate(gene_names = stringr::str_extract(gene_names, "[^;]*")) %>% 
+      dplyr::select(gene_names,
+                    dplyr::all_of(expdesign$key),
+                    peptides,
+                    razor_unique_peptides,
+                    unique_peptides,
+                    reverse,
+                    potential_contaminant,
+                    only_identified_by_site) %>% 
+      tidyr::pivot_longer(!c(gene_names,
+                             peptides,
+                             razor_unique_peptides,
+                             unique_peptides,
+                             reverse,
+                             potential_contaminant,
+                             only_identified_by_site),
           names_to = "key",
           values_to = "raw_intensity"
         ) %>% 
-        dplyr::inner_join(., expdesign, by = "key") %>%   #aggiunge righe e colonne che matchano tra expdesign e data
+        dplyr::inner_join(., exp_des, by = "key") %>%   #aggiunge righe e colonne che matchano tra expdesign e data
         dplyr::mutate(bin_intensity = dplyr::if_else(is.na(raw_intensity), 0, 1)) %>%  #Creo nuova colonna. 1 se valore esite, 0 se NA
         dplyr::select(-key)
     
   }
+
+data_filtered <- data_wrangling(data= pre_process(data=raw_data, pattern_interest = "lfq_intensity_bc_"),
+           valid_val_filter = "alog", 
+           valid_val_thr= 0.75, 
+           pep_filter= "peptides", 
+           pep_thr=2, 
+           rev=TRUE,
+           cont=TRUE,
+           oibs=TRUE)
 ```
 
+```{r Data Filtered}
+
+
+```
+
+```{r Plot_protein_coverage_static}
+
+p1 <- filtered_data %>%
+  dplyr::group_by(gene_names) %>%
+  dplyr::summarise(counts = sum(bin_intensity)) %>%
+  dplyr::ungroup() %>%
+  dplyr::count(counts) %>% 
+  dplyr::rename(occurrence = n) 
+
+
+
+ggplot(p1,aes(x= counts, y= occurrence))+
+  geom_bar(stat="identity", width = 0.6, color="black", fill="#21908CFF")+
+  # scale_y_discrete()+
+  theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5, size = 18), 
+        axis.title.x = element_text(size=15),
+        axis.title.y = element_text(size = 15),
+        axis.text.x = element_text(size=10),
+        axis.text.y = element_text(size = 10))+
+  labs(title= "Protein coverage")+
+  geom_text(aes(label=occurrence), hjust=0.5, vjust=-0.5, size=4)
