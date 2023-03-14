@@ -46,6 +46,7 @@ raw_data <- loading_data(file_path = here::here("proteinGroups.txt"))
 ```{r make-expdesig}
 #Creo table exp_des
 exp_design <- function(data, pattern_interest){
+  
   exp_des <- data %>% 
     dplyr::select(gene_names, dplyr::starts_with(pattern_interest)) %>%
     tidyr::pivot_longer(!gene_names, names_to="key", values_to= "intensity") %>% #Raggruppa tutte le lfq in unica colonna
@@ -53,17 +54,26 @@ exp_design <- function(data, pattern_interest){
     dplyr::mutate(label = stringr::str_remove(key, "lfq_intensity_bc_")) %>%
     dplyr::mutate(condition = stringr::str_remove(label, "_[^_]*$")) %>%
     dplyr::mutate(replicate = stringr::str_remove(label, ".*_"))
+  
+  return(exp_des)
 }
 
-exp_des <- exp_design(data=raw_data, pattern_interest = "lfq_intensity_bc_")
+exp_des <- exp_design (data=raw_data, pattern_interest = "lfq_intensity_bc_")
 ```
 
-```{r Data preprocessing and wrangling/Data filtered}
+```{r Data preprocessing}
 pre_process <- function(data, pattern_interest){
+  
+  data_pre <- data %>% 
   dplyr::mutate(dplyr::across(dplyr::starts_with(pattern_interest), ~ log2(.))) %>%
   dplyr::mutate(dplyr::across(dplyr::starts_with(pattern_interest), ~ dplyr::na_if(.,-Inf)))
+  
+  return(data_pre)
 }
 
+```
+
+```{r Wrangling/Data filtered}
 data_wrangling <- function(data,
                            valid_val_filter,
                            valid_val_thr, 
@@ -72,7 +82,8 @@ data_wrangling <- function(data,
                            rev,
                            cont,
                            oibs){
-  data <- data %>% #DATA STANDARDIZED
+  
+  data_wrang <- data %>% #DATA STANDARDIZED
     dplyr::select(protein_i_ds, gene_names, id) %>%
     dplyr::mutate(gene_names = stringr::str_extract(gene_names, "[^;]*")) %>%
  ## every protein groups now have only 1 gene name associated to it
@@ -128,23 +139,26 @@ data_wrangling <- function(data,
         data
         } %>%
     if(pep_filter == "peptides") {
-      dplyr::filter(data, peptides >= 2)
+      dplyr::filter(data, peptides >= pep_thr)
       } else if(pep_filter == "unique"){
-  dplyr::filter(data, unique_peptides >= 2)
+  dplyr::filter(data, unique_peptides >= pep_thr)
   }else{
-  dplyr::filter(data, razor_unique_peptides >= 2)
-}
-    
+  dplyr::filter(data, razor_unique_peptides >= pep_thr)
   }
-```
+  
+  return(data_wrang)
+    
+}
 
-```{r Palette}
-Palette <- function(){
-      n_of_color <- max(exp_des %>% dplyr::count(replicate) %>% dplyr::pull(n))
-      color_palette <- viridis::viridis(n = n_of_color , direction = -1, end = 0.70, begin = 0.30)
-    }
+data_wrang <- data_wrangling(data=raw_data, 
+                             valid_val_filter = "alog",
+                             valid_val_thr = 0.75,
+                             pep_filter = "peptides",
+                             pep_thr = 2,
+                             rev = TRUE,
+                             cont = TRUE,
+                             oibs = TRUE)
 ```
-
 
 ```{r Data Filtered}
 data_filt <- pre_process(data=raw_data, pattern_interest = "lfq_intensity_bc_") %>% 
@@ -158,6 +172,16 @@ data_filt <- pre_process(data=raw_data, pattern_interest = "lfq_intensity_bc_") 
                  oibs=TRUE)
 ```
 
+
+```{r Palette}
+Palette <- function(){
+      n_of_color <- max(exp_des %>% dplyr::count(replicate) %>% dplyr::pull(n))
+      color_palette <- viridis::viridis(n = n_of_color , direction = -1, end = 0.70, begin = 0.30)
+    }
+```
+
+
+
 ```{r Barplot}
 barplot <- function (data,
                      x,
@@ -165,13 +189,15 @@ barplot <- function (data,
                      fill,
                      width_barplot,
                      plot_title,
-                     label){
+                     label,
+                     xtitle,
+                     ytitle){
   ggplot(data, aes(x, y, fill))+
   geom_bar(stat="identity", width = width_barplot, color="black")+
   scale_fill_manual(values = color_palette)+
   theme_cuc()+
   theme(axis.text.x = element_text(angle = 30))+
-  labs(title= plot_title)+
+  labs(title= plot_title, x=xtitle, y=ytitle)+
   geom_text(aes(label=label), vjust=-0.2, size=4) 
 }
 ```
@@ -183,7 +209,9 @@ boxplot <- function (data,
                      fill,
                      width_boxplot,
                      plot_title,
-                     label){
+                     label,
+                     xtitle,
+                     ytitle){
 ggplot(data, aes(x, y, fill))+
   geom_boxplot(width=width_boxplot, color="black")+
   scale_fill_manual(values = color_palette)+
