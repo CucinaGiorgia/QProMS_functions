@@ -71,12 +71,11 @@ pre_process <- function(data, pattern_interest){
   return(data_pre)
 }
 
+data_pre <- pre_process (data=raw_data, pattern_interest =  "lfq_intensity_bc_")
 ```
 
 ```{r Wrangling/Data filtered}
-data_wrangling <- function(data,
-                           valid_val_filter,
-                           valid_val_thr, 
+data_wrangling <- function(data, 
                            pep_filter, 
                            pep_thr, 
                            rev,
@@ -123,36 +122,19 @@ data_wrangling <- function(data,
       dplyr::inner_join(., exp_des, by = "key") %>%   #aggiunge righe e colonne che matchano tra expdesign e data
       dplyr::mutate(bin_intensity = dplyr::if_else(is.na(raw_intensity), 0, 1)) %>%  #Nuova colonna. 1 se valore esite, 0 se NA
       dplyr::select(-key) %>% 
-    if(cont == TRUE) { #DATA WRANGLING
-      dplyr::filter(data, potential_contaminant == "")
-      } else{
-        data
-        } %>%
-    if(rev==TRUE) {
-      dplyr::filter(data, !reverse=="+")
-      } else {
-        data
-        } %>% 
-    if(oibs==TRUE) {
-      dplyr::filter(data, !only_identified_by_site=="+")
-      } else {
-        data
-        } %>%
-    if(pep_filter == "peptides") {
-      dplyr::filter(data, peptides >= pep_thr)
-      } else if(pep_filter == "unique"){
-  dplyr::filter(data, unique_peptides >= pep_thr)
-  }else{
-  dplyr::filter(data, razor_unique_peptides >= pep_thr)
-  }
+    {if(rev)dplyr::filter(., !reverse == "+") else .} %>% #DATA WRANGLING
+          {if(cont)dplyr::filter(., !potential_contaminant == "+") else .} %>%
+          {if(oibs)dplyr::filter(., !only_identified_by_site == "+") else .} %>% 
+          ## filter on peptides:
+          {if(pep_filter == "peptides"){dplyr::filter(., peptides >= pep_thr)}
+            else if (pep_filter == "unique") {dplyr::filter(., unique_peptides >= pep_thr)}
+            else {dplyr::filter(., razor_unique_peptides >= pep_thr)}}
   
   return(data_wrang)
     
 }
 
-data_wrang <- data_wrangling(data=raw_data, 
-                             valid_val_filter = "alog",
-                             valid_val_thr = 0.75,
+data_wrang <- data_wrangling(data=data_pre,
                              pep_filter = "peptides",
                              pep_thr = 2,
                              rev = TRUE,
@@ -161,15 +143,71 @@ data_wrang <- data_wrangling(data=raw_data,
 ```
 
 ```{r Data Filtered}
-data_filt <- pre_process(data=raw_data, pattern_interest = "lfq_intensity_bc_") %>% 
-  data_wrangling(data=.,
-                 valid_val_filter = "alog", 
-                 valid_val_thr= 0.75, 
-                 pep_filter= "peptides", 
-                 pep_thr=2, 
-                 rev=TRUE,
-                 cont=TRUE,
-                 oibs=TRUE)
+data_filtered <- function(data,
+                      valid_val_filter,
+                      valid_val_thr) {
+  data_filt<- data %>% 
+  {if(valid_val_filter == "total")dplyr::group_by(., gene_names)
+          else dplyr::group_by(., gene_names, condition)} %>% 
+        dplyr::mutate(miss_val = dplyr::n() - sum(bin_intensity)) %>% 
+        dplyr::mutate(n_size = dplyr::n()) %>%
+        dplyr::ungroup() %>%
+        dplyr::group_by(gene_names) %>%
+        ## rage compreso tra 0 e 100% espresso in valori tra 0 e 1
+        {if(valid_val_filter == "alog") dplyr::filter(., any(miss_val <= round(n_size * (1 - valid_val_thr), 0)))
+          else dplyr::filter(., all(miss_val <= round(n_size * (1 - valid_val_thr), 0)))} %>%
+        dplyr::ungroup() %>%
+        dplyr::select(gene_names, label, condition, replicate, bin_intensity, raw_intensity) %>% 
+        dplyr::rename(intensity = raw_intensity)
+  return(data_filt)
+}
+
+data_filt <- data_filtered(data = data_wrang,
+                           valid_val_filter = "alog",
+                           valid_val_thr = 0.75)
+```
+
+```{r Data imputed}
+data_imputed <- function(data,
+                         shift, 
+                         scale, 
+                         unique_visual = FALSE){
+  
+  imputed_data <- data %>%
+            dplyr::group_by(gene_names, condition) %>%
+            dplyr::mutate(for_mean_imp = dplyr::if_else((sum(bin_intensity) / dplyr::n()) >= 0.75, TRUE, FALSE)) %>%
+            dplyr::mutate(mean_grp = mean(intensity, na.rm = TRUE)) %>%
+            dplyr::ungroup() %>%
+            dplyr::mutate(imp_intensity = dplyr::case_when(
+              bin_intensity == 0 & for_mean_imp ~ mean_grp,
+              TRUE ~ as.numeric(intensity))) %>%
+            dplyr::mutate(intensity = imp_intensity) %>% 
+            dplyr::select(-c(for_mean_imp, mean_grp, imp_intensity))%>%
+  dplyr::group_by(label) %>%
+# Define statistic to generate the random distribution relative to sample
+  dplyr::mutate(mean = mean(intensity, na.rm = TRUE),
+                sd = sd(intensity, na.rm = TRUE),
+                n = sum(!is.na(intensity)),
+                total = nrow(data) - n) %>%
+  dplyr::ungroup() %>%
+# Impute missing values by random draws from a distribution
+# which is left-shifted by parameter 'shift' * sd and scaled by parameter 'scale' * sd.
+  dplyr::mutate(imp_intensity = dplyr::case_when(is.na(intensity) ~ rnorm(total,
+                                                                          mean = (mean - shift * sd), 
+                                                                          sd = sd * scale),
+                                                 TRUE ~ intensity)) %>%
+  dplyr::mutate(intensity = imp_intensity) %>%
+  dplyr::select(-c(mean, sd, n, total, imp_intensity)) %>%
+  dplyr::group_by(condition)
+ 
+  return(imputed_data) 
+}
+
+data_imput <- data_imputed (data= data_filt,
+                         shift = 1.8, 
+                         scale = 0.3, 
+                         unique_visual = FALSE)
+
 ```
 
 
@@ -192,14 +230,36 @@ barplot <- function (data,
                      label,
                      xtitle,
                      ytitle){
+  barplot <- data %>% 
   ggplot(data, aes(x, y, fill))+
   geom_bar(stat="identity", width = width_barplot, color="black")+
   scale_fill_manual(values = color_palette)+
   theme_cuc()+
   theme(axis.text.x = element_text(angle = 30))+
   labs(title= plot_title, x=xtitle, y=ytitle)+
-  geom_text(aes(label=label), vjust=-0.2, size=4) 
+  geom_text(aes(label=label), vjust=-0.2, size=4)
+  
+  return(barplot)
 }
+
+data_filt <- dplyr::group_by(label) %>%
+        dplyr::summarise(counts = sum(bin_intensity)) %>%
+        dplyr::ungroup() %>%
+        dplyr::inner_join(., expdesign, by = "label") %>%
+        dplyr::mutate(replicate = as.factor(replicate)) %>%
+        dplyr::group_by(condition) %>% 
+protein-counts-static <- barplot(data = data_filt, 
+                                 x= label, 
+                                 y=counts, 
+                                 fill=condition,
+                                 color="black",
+                                 width_barplot = 0.5,
+                                 plot_title = "Protein counts by condition",
+                                 label = count,
+                                 xtitle = "Label",
+                                 ytitle = "Counts")
+
+
 ```
 
 ```{r Boxplot}
@@ -212,11 +272,14 @@ boxplot <- function (data,
                      label,
                      xtitle,
                      ytitle){
+  boxplot <- data %>% 
 ggplot(data, aes(x, y, fill))+
   geom_boxplot(width=width_boxplot, color="black")+
   scale_fill_manual(values = color_palette)+
   theme_CUc()+
   labs(title=plot_title)
+  
+  return(boxplot)
 }
 ```
 
