@@ -236,36 +236,16 @@ barplot <- function (data,
                      label,
                      xtitle,
                      ytitle){
-  ggplot2::ggplot(data, aes(x={{x}}, y={{y}}, fill=fill))+
+  bar <- ggplot2::ggplot(data, aes(x={{x}}, y={{y}}, fill={{fill}}))+
   geom_bar(stat="identity", width = width_barplot, color=color)+
   scale_fill_manual(values = color_palette)+
   theme_cuc()+
   theme(axis.text.x = element_text(angle = 30))+
   labs(title= plot_title, x=xtitle, y=ytitle)+
-  geom_text(aes(label=label), vjust=-0.2, size=4)
+  geom_text(aes(label={{label}}), vjust=-0.2, size=4)
   
-  return(barplot)
+  return(bar)
 }
-
-data_filt <- data_filt %>% 
-  dplyr::group_by(label) %>%
-        dplyr::summarise(counts = sum(bin_intensity)) %>%
-        dplyr::ungroup() %>%
-        dplyr::inner_join(., exp_des, by = "label") %>%
-        dplyr::mutate(replicate = as.factor(replicate)) %>%
-        dplyr::group_by(condition) %>% 
-  barplot(data = .,
-          x= label, 
-          y=counts, 
-          fill=condition,
-          color="black",
-          width_barplot = 0.5,
-          plot_title = "Protein counts by condition",
-          label = count,
-          xtitle = "Label",
-          ytitle = "Counts")
-
-
 ```
 
 ```{r Boxplot}
@@ -278,16 +258,97 @@ boxplot <- function (data,
                      label,
                      xtitle,
                      ytitle){
-    ggplot2::ggplot(data, aes(x={{x}}, y={{y}}, fill=fill))+
+    box <- ggplot2::ggplot(data, aes(x={{x}}, y={{y}}, fill={{fill}}))+
     geom_boxplot(width=width_boxplot, color="black")+
     scale_fill_manual(values = color_palette)+
-    theme_CUc()+
-    theme(axis.text = element_text(angle = 30))
-    labs(title=plot_title)
+    theme_cuc()+
+    theme(axis.text.x = element_text(angle = 30))+
+    labs(title=plot_title, x=xtitle, y=ytitle)
   
-  return(boxplot)
+  return(box)
 }
 
+```
+
+```{r Density plot}
+densityplot <- function (data,
+                         x,
+                         color,
+                         plot_title,
+                         xtitle,
+                         ytitle){
+  den <- ggplot2::ggplot(data, aes(x={{x}}, color={{color}}))+
+    geom_density(linewidth=0.8)+
+    scale_color_manual(values = c("#481567FF", "#21908CFF"))+
+    theme_cuc()+
+    labs(title=plot_title, x=xtitle, y=ytitle)
+  
+  return(den)
+}
+
+
+data_filt <- data_filt %>%
+  dplyr::group_by(gene_names) %>%
+  dplyr::summarise(mean = mean(intensity, na.rm = TRUE),
+                   missval = any(is.na(intensity))) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(missing_value = dplyr::if_else(missval, "Missing", "Valid")) %>%
+  dplyr::mutate(missing_value = factor(missing_value, levels = c("Valid", "Missing"))) %>%
+  dplyr::group_by(missing_value) %>% 
+  
+  densityplot(data=.,
+        x=mean,
+        color=missing_value,
+        plot_title="Density plot",
+        xtitle= "Log2Intensity",
+        ytitle="Density")
+
+```
+
+
+```{r Protein count by condition}
+
+barplot(data = data_filt %>% 
+            dplyr::group_by(label) %>%
+            dplyr::summarise(counts = sum(bin_intensity)) %>%
+            dplyr::ungroup() %>%
+            dplyr::inner_join(., exp_des, by = "label") %>%
+            dplyr::mutate(replicate = as.factor(replicate)) %>%
+            dplyr::group_by(condition),
+          x= label, 
+          y=counts, 
+          fill=condition,
+          color="black",
+          width_barplot = 0.5,
+          plot_title = "Protein counts by condition",
+          label = counts,
+          xtitle = "Label",
+          ytitle = "Counts")
+```
+
+
+```{r Protein Coverage}
+
+barplot(data = data_filt %>% 
+          dplyr::group_by(gene_names) %>%
+          dplyr::summarise(counts = sum(bin_intensity)) %>%
+          dplyr::ungroup() %>%
+          dplyr::count(counts) %>% 
+          dplyr::rename(occurrence = n),
+        x= counts, 
+        y=occurence, 
+        fill="#21908CFF",
+        color="black",
+        width_barplot = 0.6,
+        plot_title = "Protein counts by condition",
+        label = occurrence,
+        xtitle = "Counts",
+        ytitle = "Occurence")
+
+
+```
+
+```{r Normalized data distribution}
 boxplot(data=data_filt,
         x=label,
         y=intensity,
@@ -297,9 +358,5 @@ boxplot(data=data_filt,
         label="",
         xtitle= "Label",
         ytitle="Intensity")
-```
-
-```{r Density plot}
-
 ```
 
