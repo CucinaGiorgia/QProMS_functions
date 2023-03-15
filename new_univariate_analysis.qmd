@@ -24,8 +24,6 @@ library(ggplot2)
 library(vsn)
 library(corrmorant)
 
-source(file = here::here("r6class_app.R"))
-
 source(file = "C:/Users/MSU/Documents/GC/Analysis/theme_ggplot_test.R")
 ```
 
@@ -42,6 +40,8 @@ loading_data <- function(file_path){
 raw_data <- loading_data(file_path = here::here("proteinGroups.txt"))
 
 ```
+
+# Make Experimental Design
 
 ```{r make-expdesig}
 #Creo table exp_des
@@ -61,6 +61,8 @@ exp_design <- function(data, pattern_interest){
 exp_des <- exp_design (data=raw_data, pattern_interest = "lfq_intensity_bc_")
 ```
 
+# Data pre-processing
+
 ```{r Data preprocessing}
 pre_process <- function(data, pattern_interest){
   
@@ -73,6 +75,8 @@ pre_process <- function(data, pattern_interest){
 
 data_pre <- pre_process (data=raw_data, pattern_interest =  "lfq_intensity_bc_")
 ```
+
+# Data wrangling merged table (exp_des+pre_process)
 
 ```{r Wrangling/Data filtered}
 data_wrangling <- function(data, 
@@ -142,6 +146,8 @@ data_wrang <- data_wrangling(data=data_pre,
                              oibs = TRUE)
 ```
 
+# Filter application
+
 ```{r Data Filtered}
 data_filtered <- function(data,
                       valid_val_filter,
@@ -166,6 +172,8 @@ data_filt <- data_filtered(data = data_wrang,
                            valid_val_filter = "alog",
                            valid_val_thr = 0.75)
 ```
+
+# Data imputation
 
 ```{r Data imputed}
 data_imputed <- function(data,
@@ -210,29 +218,26 @@ data_imput <- data_imputed (data= data_filt,
 
 ```
 
-
 ```{r Palette}
-Palette <- function(){
-      n_of_color <- max(exp_des %>% dplyr::count(replicate) %>% dplyr::pull(n))
-      color_palette <- viridis::viridis(n = n_of_color , direction = -1, end = 0.70, begin = 0.30)
-    }
+n_of_color <- max(exp_des %>% dplyr::count(replicate) %>% dplyr::pull(n))
+color_palette <- viridis::viridis(n = n_of_color , direction = -1, end = 0.70, begin = 0.30)
+
 ```
 
-
-
 ```{r Barplot}
+
 barplot <- function (data,
                      x,
                      y,
                      fill,
+                     color,
                      width_barplot,
                      plot_title,
                      label,
                      xtitle,
                      ytitle){
-  barplot <- data %>% 
-  ggplot(data, aes(x, y, fill))+
-  geom_bar(stat="identity", width = width_barplot, color="black")+
+  ggplot2::ggplot(data, aes(x={{x}}, y={{y}}, fill=fill))+
+  geom_bar(stat="identity", width = width_barplot, color=color)+
   scale_fill_manual(values = color_palette)+
   theme_cuc()+
   theme(axis.text.x = element_text(angle = 30))+
@@ -242,22 +247,23 @@ barplot <- function (data,
   return(barplot)
 }
 
-data_filt <- dplyr::group_by(label) %>%
+data_filt <- data_filt %>% 
+  dplyr::group_by(label) %>%
         dplyr::summarise(counts = sum(bin_intensity)) %>%
         dplyr::ungroup() %>%
-        dplyr::inner_join(., expdesign, by = "label") %>%
+        dplyr::inner_join(., exp_des, by = "label") %>%
         dplyr::mutate(replicate = as.factor(replicate)) %>%
         dplyr::group_by(condition) %>% 
-protein-counts-static <- barplot(data = data_filt, 
-                                 x= label, 
-                                 y=counts, 
-                                 fill=condition,
-                                 color="black",
-                                 width_barplot = 0.5,
-                                 plot_title = "Protein counts by condition",
-                                 label = count,
-                                 xtitle = "Label",
-                                 ytitle = "Counts")
+  barplot(data = .,
+          x= label, 
+          y=counts, 
+          fill=condition,
+          color="black",
+          width_barplot = 0.5,
+          plot_title = "Protein counts by condition",
+          label = count,
+          xtitle = "Label",
+          ytitle = "Counts")
 
 
 ```
@@ -272,14 +278,28 @@ boxplot <- function (data,
                      label,
                      xtitle,
                      ytitle){
-  boxplot <- data %>% 
-ggplot(data, aes(x, y, fill))+
-  geom_boxplot(width=width_boxplot, color="black")+
-  scale_fill_manual(values = color_palette)+
-  theme_CUc()+
-  labs(title=plot_title)
+    ggplot2::ggplot(data, aes(x={{x}}, y={{y}}, fill=fill))+
+    geom_boxplot(width=width_boxplot, color="black")+
+    scale_fill_manual(values = color_palette)+
+    theme_CUc()+
+    theme(axis.text = element_text(angle = 30))
+    labs(title=plot_title)
   
   return(boxplot)
 }
+
+boxplot(data=data_filt,
+        x=label,
+        y=intensity,
+        fill=condition,
+        width_boxplot=0.5,
+        plot_title="Normalized data distribution",
+        label="",
+        xtitle= "Label",
+        ytitle="Intensity")
+```
+
+```{r Density plot}
+
 ```
 
