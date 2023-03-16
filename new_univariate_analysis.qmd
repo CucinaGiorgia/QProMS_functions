@@ -226,26 +226,33 @@ color_palette <- viridis::viridis(n = n_of_color , direction = -1, end = 0.70, b
 
 ```{r Barplot}
 
-barplot <- function (data,
-                     x,
-                     y,
-                     fill,
+barplot_count <- function (data,
                      color,
-                     width_barplot,
-                     plot_title,
-                     label,
-                     xtitle,
-                     ytitle){
-  bar <- ggplot2::ggplot(data, aes(x={{x}}, y={{y}}, fill={{fill}}))+
+                     width_barplot){
+  bar <- data %>% 
+            dplyr::group_by(label) %>%
+            dplyr::summarise(counts = sum(bin_intensity)) %>%
+            dplyr::ungroup() %>%
+            dplyr::inner_join(., exp_des, by = "label") %>%
+            dplyr::mutate(replicate = as.factor(replicate)) %>%
+            dplyr::group_by(condition) %>% 
+    
+  ggplot2::ggplot(aes(x=label, y=counts, fill=condition))+
   geom_bar(stat="identity", width = width_barplot, color=color)+
   scale_fill_manual(values = color_palette)+
   theme_cuc()+
   theme(axis.text.x = element_text(angle = 30))+
-  labs(title= plot_title, x=xtitle, y=ytitle)+
-  geom_text(aes(label={{label}}), vjust=-0.2, size=4)
+  labs(title= "Protein counts", x="Label", y="Counts")+
+  geom_text(aes(label=counts), vjust=-0.2, size=4)
   
   return(bar)
 }
+
+
+barplot_count(data = data_filt,
+          color="black",
+          width_barplot = 0.5)
+  
 ```
 
 ```{r Boxplot}
@@ -305,7 +312,6 @@ data_filt <- data_filt %>%
 
 ```
 
-
 ```{r Protein count by condition}
 
 barplot(data = data_filt %>% 
@@ -326,7 +332,6 @@ barplot(data = data_filt %>%
           ytitle = "Counts")
 ```
 
-
 ```{r Protein Coverage}
 
 barplot(data = data_filt %>% 
@@ -336,14 +341,16 @@ barplot(data = data_filt %>%
           dplyr::count(counts) %>% 
           dplyr::rename(occurrence = n),
         x= counts, 
-        y=occurence, 
+        y=occurrence, 
         fill="#21908CFF",
         color="black",
         width_barplot = 0.6,
         plot_title = "Protein counts by condition",
         label = occurrence,
         xtitle = "Counts",
-        ytitle = "Occurence")
+        ytitle = "Occurence")+
+  theme(legend.position = "none")+
+  
 
 
 ```
@@ -359,4 +366,3 @@ boxplot(data=data_filt,
         xtitle= "Label",
         ytitle="Intensity")
 ```
-
