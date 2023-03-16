@@ -224,11 +224,10 @@ color_palette <- viridis::viridis(n = n_of_color , direction = -1, end = 0.70, b
 
 ```
 
-```{r Barplot}
-
+```{r Barplot Count}
 barplot_count <- function (data,
-                     color,
-                     width_barplot){
+                           color,
+                           width_barplot){
   bar <- data %>% 
             dplyr::group_by(label) %>%
             dplyr::summarise(counts = sum(bin_intensity)) %>%
@@ -247,109 +246,91 @@ barplot_count <- function (data,
   
   return(bar)
 }
-
-
-barplot_count(data = data_filt,
-          color="black",
-          width_barplot = 0.5)
   
 ```
 
 ```{r Boxplot}
 boxplot <- function (data,
-                     x,
-                     y,
-                     fill,
                      width_boxplot,
-                     plot_title,
-                     label,
-                     xtitle,
-                     ytitle){
-    box <- ggplot2::ggplot(data, aes(x={{x}}, y={{y}}, fill={{fill}}))+
-    geom_boxplot(width=width_boxplot, color="black")+
+                     color){
+    box <- ggplot2::ggplot(data, aes(x=label, y=intensity, fill=condition))+
+    geom_boxplot(width=width_boxplot, color=color)+
     scale_fill_manual(values = color_palette)+
     theme_cuc()+
     theme(axis.text.x = element_text(angle = 30))+
-    labs(title=plot_title, x=xtitle, y=ytitle)
+    labs(title="Normalized data distribution", x="Label", y="Intensity")
   
   return(box)
 }
+
+
 
 ```
 
 ```{r Density plot}
 densityplot <- function (data,
-                         x,
-                         color,
-                         plot_title,
-                         xtitle,
-                         ytitle){
-  den <- ggplot2::ggplot(data, aes(x={{x}}, color={{color}}))+
-    geom_density(linewidth=0.8)+
-    scale_color_manual(values = c("#481567FF", "#21908CFF"))+
+                         color1,
+                         color2){
+  den <- data %>% 
+    dplyr::group_by(gene_names) %>%
+    dplyr::summarise(mean = mean(intensity, na.rm = TRUE),
+                   missval = any(is.na(intensity))) %>%
+    dplyr::ungroup() %>%
+  dplyr::mutate(missing_value = dplyr::if_else(missval, "Missing", "Valid")) %>%
+  dplyr::mutate(missing_value = factor(missing_value, levels = c("Valid", "Missing"))) %>%
+  dplyr::group_by(missing_value) %>%
+    ggplot2::ggplot(aes(x=mean, color=missing_value))+
+    geom_density(linewidth=0.8, linetype='solid')+
+    scale_color_manual(values = c(color1, color2 ))+
     theme_cuc()+
-    labs(title=plot_title, x=xtitle, y=ytitle)
+    labs(title="Density plot", x="Log2Intensity", y="Density")
   
   return(den)
 }
 
 
-data_filt <- data_filt %>%
-  dplyr::group_by(gene_names) %>%
-  dplyr::summarise(mean = mean(intensity, na.rm = TRUE),
-                   missval = any(is.na(intensity))) %>%
-  dplyr::ungroup() %>%
-  dplyr::mutate(missing_value = dplyr::if_else(missval, "Missing", "Valid")) %>%
-  dplyr::mutate(missing_value = factor(missing_value, levels = c("Valid", "Missing"))) %>%
-  dplyr::group_by(missing_value) %>% 
-  
-  densityplot(data=.,
-        x=mean,
-        color=missing_value,
-        plot_title="Density plot",
-        xtitle= "Log2Intensity",
-        ytitle="Density")
+  densityplot(data=data_filt,
+              color1="#481567FF",
+              color2="#21908CFF")
 
 ```
 
 ```{r Protein count by condition}
-
-barplot(data = data_filt %>% 
-            dplyr::group_by(label) %>%
-            dplyr::summarise(counts = sum(bin_intensity)) %>%
-            dplyr::ungroup() %>%
-            dplyr::inner_join(., exp_des, by = "label") %>%
-            dplyr::mutate(replicate = as.factor(replicate)) %>%
-            dplyr::group_by(condition),
-          x= label, 
-          y=counts, 
-          fill=condition,
+barplot_count(data = data_filt,
           color="black",
-          width_barplot = 0.5,
-          plot_title = "Protein counts by condition",
-          label = counts,
-          xtitle = "Label",
-          ytitle = "Counts")
+          width_barplot = 0.5)
 ```
 
 ```{r Protein Coverage}
-
-barplot(data = data_filt %>% 
+barplot_cover <- function (data,
+                           fill,
+                           color,
+                           width_barplot){
+  bar <- data %>% 
           dplyr::group_by(gene_names) %>%
           dplyr::summarise(counts = sum(bin_intensity)) %>%
           dplyr::ungroup() %>%
           dplyr::count(counts) %>% 
-          dplyr::rename(occurrence = n),
-        x= counts, 
-        y=occurrence, 
+          dplyr::rename(occurrence = n) %>% 
+    
+  ggplot2::ggplot(aes(x=counts, y=occurrence, fill=fill))+
+  geom_bar(stat="identity", width = width_barplot, color=color)+
+  scale_fill_manual(values = color_palette)+
+  theme_cuc()+
+  labs(title= "Protein coverage", x="Counts", y= "Occurence")+
+  geom_text(aes(label=counts), vjust=-0.2, size=4)+
+  scale_x_continuous(breaks = min(counts):max(counts))
+  
+  return(bar)
+}
+
+
+
+barplot_cover(data = data_filt,
         fill="#21908CFF",
-        color="black",
         width_barplot = 0.6,
-        plot_title = "Protein counts by condition",
-        label = occurrence,
-        xtitle = "Counts",
-        ytitle = "Occurence")+
-  theme(legend.position = "none")+
+        color="black")+
+  theme(legend.position = "none")
   
 
 
@@ -357,12 +338,70 @@ barplot(data = data_filt %>%
 
 ```{r Normalized data distribution}
 boxplot(data=data_filt,
-        x=label,
-        y=intensity,
-        fill=condition,
         width_boxplot=0.5,
-        plot_title="Normalized data distribution",
-        label="",
-        xtitle= "Label",
-        ytitle="Intensity")
+        color = "black")
 ```
+
+```{rPlot Missing data}
+p3 <- filtered_data %>%
+  dplyr::group_by(label, condition) %>% 
+  dplyr::mutate(bin_intensity = dplyr::if_else(bin_intensity == 1, "Valid", "Missing")) %>%
+  dplyr::count(bin_intensity) %>% 
+  tidyr::pivot_wider(id_cols = NULL, names_from = bin_intensity, values_from = n) %>% 
+  {if(ncol(.) == 2) dplyr::mutate(., Missing = 0)else . } %>% 
+  dplyr::ungroup() %>%
+  dplyr::mutate(total = Valid + Missing) %>%
+  dplyr::mutate(perc_present = paste0(round(Valid*100/total, 1), "%")) %>%
+  dplyr::mutate(perc_missing = paste0(round(Missing*100/total, 1), "%"))
+
+#Plot only valid data 
+ggplot(p3,aes(x= label, y= Valid, fill=condition))+
+  geom_bar(stat="identity", width = 0.6, color="black")+
+  scale_fill_manual(values = color_palette)+
+  theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5, size = 18), 
+        legend.position = 'right',
+        axis.title.x = element_text(size=15),
+        axis.title.y = element_text(size = 15),
+        axis.text.x = element_text(size=10, angle = 30),
+        axis.text.y = element_text(size = 10))+
+  labs(title= "Plot valid data", x="Samples", y="Counts")+
+  geom_text(aes(label=Valid), vjust=-0.2, size=4) 
+
+#Plot only missing data
+ggplot(p3,aes(x= label, y= Missing, fill=condition))+
+  geom_bar(stat="identity", width = 0.6, color="black")+
+  scale_fill_manual(values = color_palette)+
+  theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5, size = 18), 
+        legend.position = 'right',
+        axis.title.x = element_text(size=15),
+        axis.title.y = element_text(size = 15),
+        axis.text.x = element_text(size=10, angle = 30),
+        axis.text.y = element_text(size = 10))+
+  labs(title= "Plot missing data", x="Samples", y="Counts")+
+  geom_text(aes(label=Missing), vjust=-0.2, size=4) 
+
+#Summary plot missing/valid data
+p3.1 <-filtered_data %>%
+  dplyr::group_by(label) %>% 
+  dplyr::mutate(bin_intensity = dplyr::if_else(bin_intensity == 1, "Valid", "Missing")) %>%
+  dplyr::count(bin_intensity) %>% 
+  dplyr::mutate(bin_intensity = as.factor(bin_intensity)) %>% 
+  dplyr::rename(Data= bin_intensity)
+
+ggplot(p3.1,aes(x= label, y= n, fill=Data))+
+  geom_bar(stat="identity", width = 0.8, color="black")+
+  scale_fill_manual(values = c("#21908CFF", "#481567FF"))+
+  theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5, size = 18), 
+        legend.position = 'right',
+        axis.title.x = element_text(size=15),
+        axis.title.y = element_text(size = 15),
+        axis.text.x = element_text(size=10, angle = 30),
+        axis.text.y = element_text(size = 10))+
+  labs(title= "Plot valid and missing data", x="Samples", y="Counts")+
+  geom_label(aes(label=n), position= position_stack(vjust = 0.5), size=3, show.legend = FALSE, color="white")
+
+```
+
