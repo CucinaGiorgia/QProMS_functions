@@ -23,55 +23,28 @@ library(visNetwork)
 library(ggplot2)
 library(vsn)
 library(corrmorant)
+library(ComplexHeatmap)
 
+source(file = "C:/Users/MSU/Documents/GC/Analysis/myfun_test.R")
 source(file = "C:/Users/MSU/Documents/GC/Analysis/theme_ggplot_test.R")
 ```
 
 # Loading raw data
 
 ```{r loading-data}
-
-loading_data <- function(file_path){
-  raw_data <- data.table::fread(file_path) %>% #Carica file
-    tibble::as_tibble(.name_repair=janitor::make_clean_names) #Modifica file: il nome delle colonne senza spazi e con minuscolo
-  return(raw_data)
-}
-
 raw_data <- loading_data(file_path = here::here("proteinGroups.txt"))
-
 ```
 
 # Make Experimental Design
 
 ```{r make-expdesig}
-#Creo table exp_des
-exp_design <- function(data, pattern_interest){
-  
-  exp_des <- data %>% 
-    dplyr::select(gene_names, dplyr::starts_with(pattern_interest)) %>%
-    tidyr::pivot_longer(!gene_names, names_to="key", values_to= "intensity") %>% #Raggruppa tutte le lfq in unica colonna
-    dplyr::distinct(key) %>%
-    dplyr::mutate(label = stringr::str_remove(key, "lfq_intensity_bc_")) %>%
-    dplyr::mutate(condition = stringr::str_remove(label, "_[^_]*$")) %>%
-    dplyr::mutate(replicate = stringr::str_remove(label, ".*_"))
-  
-  return(exp_des)
-}
-
 exp_des <- exp_design (data=raw_data, pattern_interest = "lfq_intensity_bc_")
 ```
 
 # Data pre-processing
 
 ```{r Data preprocessing}
-pre_process <- function(data, pattern_interest){
-  
-  data_pre <- data %>% 
-  dplyr::mutate(dplyr::across(dplyr::starts_with(pattern_interest), ~ log2(.))) %>%
-  dplyr::mutate(dplyr::across(dplyr::starts_with(pattern_interest), ~ dplyr::na_if(.,-Inf)))
-  
-  return(data_pre)
-}
+
 
 data_pre <- pre_process (data=raw_data, pattern_interest =  "lfq_intensity_bc_")
 ```
@@ -79,95 +52,14 @@ data_pre <- pre_process (data=raw_data, pattern_interest =  "lfq_intensity_bc_")
 # Data wrangling merged table (exp_des+pre_process)
 
 ```{r Wrangling/Data filtered}
-data_wrangling <- function(data, 
-                           pep_filter, 
-                           pep_thr, 
-                           rev,
-                           cont,
-                           oibs){
-  
-  data_wrang <- data %>% #DATA STANDARDIZED
-    dplyr::select(protein_i_ds, gene_names, id) %>%
-    dplyr::mutate(gene_names = stringr::str_extract(gene_names, "[^;]*")) %>%
- ## every protein groups now have only 1 gene name associated to it
-    dplyr::rename(unique_gene_names = gene_names) %>%
-    janitor::get_dupes(unique_gene_names) %>%
-    dplyr::mutate(unique_gene_names = dplyr::case_when(
-    unique_gene_names != "" ~ paste0(
-    unique_gene_names, "__",
-    stringr::str_extract(protein_i_ds, "[^;]*")),
-    TRUE ~ stringr::str_extract(protein_i_ds, "[^;]*"))) %>%
-    dplyr::select(unique_gene_names, id) %>%
-    dplyr::right_join(data, by = "id") %>%
-    dplyr::mutate(gene_names = dplyr::case_when(unique_gene_names != "" ~ unique_gene_names,
-                                                TRUE ~ gene_names)) %>%
-    dplyr::select(-unique_gene_names) %>%
-    dplyr::mutate(gene_names = dplyr::if_else(gene_names == "",
-                                                stringr::str_extract(protein_i_ds, "[^;]*"),
-                                                gene_names)) %>%
-    dplyr::mutate(gene_names = stringr::str_extract(gene_names, "[^;]*")) %>% 
-    dplyr::select(gene_names,
-                  dplyr::all_of(exp_des$key),
-                  peptides,
-                  razor_unique_peptides,
-                  unique_peptides,
-                  reverse,
-                  potential_contaminant,
-                  only_identified_by_site) %>% 
-      tidyr::pivot_longer(!c(gene_names,
-                             peptides,
-                             razor_unique_peptides,
-                             unique_peptides,
-                             reverse,
-                             potential_contaminant,
-                             only_identified_by_site),
-                          names_to = "key",
-                          values_to = "raw_intensity") %>% 
-      dplyr::inner_join(., exp_des, by = "key") %>%   #aggiunge righe e colonne che matchano tra expdesign e data
-      dplyr::mutate(bin_intensity = dplyr::if_else(is.na(raw_intensity), 0, 1)) %>%  #Nuova colonna. 1 se valore esite, 0 se NA
-      dplyr::select(-key) %>% 
-    {if(rev)dplyr::filter(., !reverse == "+") else .} %>% #DATA WRANGLING
-          {if(cont)dplyr::filter(., !potential_contaminant == "+") else .} %>%
-          {if(oibs)dplyr::filter(., !only_identified_by_site == "+") else .} %>% 
-          ## filter on peptides:
-          {if(pep_filter == "peptides"){dplyr::filter(., peptides >= pep_thr)}
-            else if (pep_filter == "unique") {dplyr::filter(., unique_peptides >= pep_thr)}
-            else {dplyr::filter(., razor_unique_peptides >= pep_thr)}}
-  
-  return(data_wrang)
-    
-}
-
 data_wrang <- data_wrangling(data=data_pre,
                              pep_filter = "peptides",
-                             pep_thr = 2,
-                             rev = TRUE,
-                             cont = TRUE,
-                             oibs = TRUE)
+                             pep_thr = 2)
 ```
 
 # Filter application
 
 ```{r Data Filtered}
-data_filtered <- function(data,
-                      valid_val_filter,
-                      valid_val_thr) {
-  data_filt<- data %>% 
-  {if(valid_val_filter == "total")dplyr::group_by(., gene_names)
-          else dplyr::group_by(., gene_names, condition)} %>% 
-        dplyr::mutate(miss_val = dplyr::n() - sum(bin_intensity)) %>% 
-        dplyr::mutate(n_size = dplyr::n()) %>%
-        dplyr::ungroup() %>%
-        dplyr::group_by(gene_names) %>%
-        ## rage compreso tra 0 e 100% espresso in valori tra 0 e 1
-        {if(valid_val_filter == "alog") dplyr::filter(., any(miss_val <= round(n_size * (1 - valid_val_thr), 0)))
-          else dplyr::filter(., all(miss_val <= round(n_size * (1 - valid_val_thr), 0)))} %>%
-        dplyr::ungroup() %>%
-        dplyr::select(gene_names, label, condition, replicate, bin_intensity, raw_intensity) %>% 
-        dplyr::rename(intensity = raw_intensity)
-  return(data_filt)
-}
-
 data_filt <- data_filtered(data = data_wrang,
                            valid_val_filter = "alog",
                            valid_val_thr = 0.75)
@@ -176,41 +68,6 @@ data_filt <- data_filtered(data = data_wrang,
 # Data imputation
 
 ```{r Data imputed}
-data_imputed <- function(data,
-                         shift, 
-                         scale, 
-                         unique_visual = FALSE){
-  
-  imputed_data <- data %>%
-            dplyr::group_by(gene_names, condition) %>%
-            dplyr::mutate(for_mean_imp = dplyr::if_else((sum(bin_intensity) / dplyr::n()) >= 0.75, TRUE, FALSE)) %>%
-            dplyr::mutate(mean_grp = mean(intensity, na.rm = TRUE)) %>%
-            dplyr::ungroup() %>%
-            dplyr::mutate(imp_intensity = dplyr::case_when(
-              bin_intensity == 0 & for_mean_imp ~ mean_grp,
-              TRUE ~ as.numeric(intensity))) %>%
-            dplyr::mutate(intensity = imp_intensity) %>% 
-            dplyr::select(-c(for_mean_imp, mean_grp, imp_intensity))%>%
-  dplyr::group_by(label) %>%
-# Define statistic to generate the random distribution relative to sample
-  dplyr::mutate(mean = mean(intensity, na.rm = TRUE),
-                sd = sd(intensity, na.rm = TRUE),
-                n = sum(!is.na(intensity)),
-                total = nrow(data) - n) %>%
-  dplyr::ungroup() %>%
-# Impute missing values by random draws from a distribution
-# which is left-shifted by parameter 'shift' * sd and scaled by parameter 'scale' * sd.
-  dplyr::mutate(imp_intensity = dplyr::case_when(is.na(intensity) ~ rnorm(total,
-                                                                          mean = (mean - shift * sd), 
-                                                                          sd = sd * scale),
-                                                 TRUE ~ intensity)) %>%
-  dplyr::mutate(intensity = imp_intensity) %>%
-  dplyr::select(-c(mean, sd, n, total, imp_intensity)) %>%
-  dplyr::group_by(condition)
- 
-  return(imputed_data) 
-}
-
 data_imput <- data_imputed (data= data_filt,
                          shift = 1.8, 
                          scale = 0.3, 
@@ -224,184 +81,38 @@ color_palette <- viridis::viridis(n = n_of_color , direction = -1, end = 0.70, b
 
 ```
 
-```{r Barplot Count}
-barplot_count <- function (data,
-                           color,
-                           width_barplot){
-  bar <- data %>% 
-            dplyr::group_by(label) %>%
-            dplyr::summarise(counts = sum(bin_intensity)) %>%
-            dplyr::ungroup() %>%
-            dplyr::inner_join(., exp_des, by = "label") %>%
-            dplyr::mutate(replicate = as.factor(replicate)) %>%
-            dplyr::group_by(condition) %>% 
-    
-  ggplot2::ggplot(aes(x=label, y=counts, fill=condition))+
-  geom_bar(stat="identity", width = width_barplot, color=color)+
-  scale_fill_manual(values = color_palette)+
-  theme_cuc()+
-  theme(axis.text.x = element_text(angle = 30))+
-  labs(title= "Protein counts", x="Label", y="Counts")+
-  geom_text(aes(label=counts), vjust=-0.2, size=4)
-  
-  return(bar)
-}
-  
-```
-
-```{r Boxplot}
-boxplot <- function (data,
-                     width_boxplot,
-                     color){
-    box <- ggplot2::ggplot(data, aes(x=label, y=intensity, fill=condition))+
-    geom_boxplot(width=width_boxplot, color=color)+
-    scale_fill_manual(values = color_palette)+
-    theme_cuc()+
-    theme(axis.text.x = element_text(angle = 30))+
-    labs(title="Normalized data distribution", x="Label", y="Intensity")
-  
-  return(box)
-}
-
-
-
-```
-
-```{r Density plot}
-densityplot <- function (data,
-                         color1,
-                         color2){
-  den <- data %>% 
-    dplyr::group_by(gene_names) %>%
-    dplyr::summarise(mean = mean(intensity, na.rm = TRUE),
-                   missval = any(is.na(intensity))) %>%
-    dplyr::ungroup() %>%
-  dplyr::mutate(missing_value = dplyr::if_else(missval, "Missing", "Valid")) %>%
-  dplyr::mutate(missing_value = factor(missing_value, levels = c("Valid", "Missing"))) %>%
-  dplyr::group_by(missing_value) %>%
-    ggplot2::ggplot(aes(x=mean, color=missing_value))+
-    geom_density(linewidth=0.8, linetype='solid')+
-    scale_color_manual(values = c(color1, color2 ))+
-    theme_cuc()+
-    labs(title="Density plot", x="Log2Intensity", y="Density")
-  
-  return(den)
-}
-
-
-  densityplot(data=data_filt,
-              color1="#481567FF",
-              color2="#21908CFF")
-
-```
-
 ```{r Protein count by condition}
-barplot_count(data = data_filt,
-          color="black",
-          width_barplot = 0.5)
+barplot_count(data = data_filt)
 ```
 
 ```{r Protein Coverage}
-barplot_cover <- function (data,
-                           fill,
-                           color,
-                           width_barplot){
-  bar <- data %>% 
-          dplyr::group_by(gene_names) %>%
-          dplyr::summarise(counts = sum(bin_intensity)) %>%
-          dplyr::ungroup() %>%
-          dplyr::count(counts) %>% 
-          dplyr::rename(occurrence = n) %>% 
-    
-  ggplot2::ggplot(aes(x=counts, y=occurrence, fill=fill))+
-  geom_bar(stat="identity", width = width_barplot, color=color)+
-  scale_fill_manual(values = color_palette)+
-  theme_cuc()+
-  labs(title= "Protein coverage", x="Counts", y= "Occurence")+
-  geom_text(aes(label=counts), vjust=-0.2, size=4)+
-  scale_x_continuous(breaks = min(counts):max(counts))
-  
-  return(bar)
-}
-
-
-
-barplot_cover(data = data_filt,
-        fill="#21908CFF",
-        width_barplot = 0.6,
-        color="black")+
+barplot_cover(data = data_filt)+
   theme(legend.position = "none")
-  
-
 
 ```
 
 ```{r Normalized data distribution}
-boxplot(data=data_filt,
-        width_boxplot=0.5,
-        color = "black")
+boxplot(data=data_filt)
 ```
+
+```{r Missing data distribution}
+densityplot(data=data_filt)
+```
+
 
 ```{rPlot Missing data}
-p3 <- filtered_data %>%
-  dplyr::group_by(label, condition) %>% 
-  dplyr::mutate(bin_intensity = dplyr::if_else(bin_intensity == 1, "Valid", "Missing")) %>%
-  dplyr::count(bin_intensity) %>% 
-  tidyr::pivot_wider(id_cols = NULL, names_from = bin_intensity, values_from = n) %>% 
-  {if(ncol(.) == 2) dplyr::mutate(., Missing = 0)else . } %>% 
-  dplyr::ungroup() %>%
-  dplyr::mutate(total = Valid + Missing) %>%
-  dplyr::mutate(perc_present = paste0(round(Valid*100/total, 1), "%")) %>%
-  dplyr::mutate(perc_missing = paste0(round(Missing*100/total, 1), "%"))
-
-#Plot only valid data 
-ggplot(p3,aes(x= label, y= Valid, fill=condition))+
-  geom_bar(stat="identity", width = 0.6, color="black")+
-  scale_fill_manual(values = color_palette)+
-  theme_minimal()+
-  theme(plot.title = element_text(hjust = 0.5, size = 18), 
-        legend.position = 'right',
-        axis.title.x = element_text(size=15),
-        axis.title.y = element_text(size = 15),
-        axis.text.x = element_text(size=10, angle = 30),
-        axis.text.y = element_text(size = 10))+
-  labs(title= "Plot valid data", x="Samples", y="Counts")+
-  geom_text(aes(label=Valid), vjust=-0.2, size=4) 
-
-#Plot only missing data
-ggplot(p3,aes(x= label, y= Missing, fill=condition))+
-  geom_bar(stat="identity", width = 0.6, color="black")+
-  scale_fill_manual(values = color_palette)+
-  theme_minimal()+
-  theme(plot.title = element_text(hjust = 0.5, size = 18), 
-        legend.position = 'right',
-        axis.title.x = element_text(size=15),
-        axis.title.y = element_text(size = 15),
-        axis.text.x = element_text(size=10, angle = 30),
-        axis.text.y = element_text(size = 10))+
-  labs(title= "Plot missing data", x="Samples", y="Counts")+
-  geom_text(aes(label=Missing), vjust=-0.2, size=4) 
-
-#Summary plot missing/valid data
-p3.1 <-filtered_data %>%
-  dplyr::group_by(label) %>% 
-  dplyr::mutate(bin_intensity = dplyr::if_else(bin_intensity == 1, "Valid", "Missing")) %>%
-  dplyr::count(bin_intensity) %>% 
-  dplyr::mutate(bin_intensity = as.factor(bin_intensity)) %>% 
-  dplyr::rename(Data= bin_intensity)
-
-ggplot(p3.1,aes(x= label, y= n, fill=Data))+
-  geom_bar(stat="identity", width = 0.8, color="black")+
-  scale_fill_manual(values = c("#21908CFF", "#481567FF"))+
-  theme_minimal()+
-  theme(plot.title = element_text(hjust = 0.5, size = 18), 
-        legend.position = 'right',
-        axis.title.x = element_text(size=15),
-        axis.title.y = element_text(size = 15),
-        axis.text.x = element_text(size=10, angle = 30),
-        axis.text.y = element_text(size = 10))+
-  labs(title= "Plot valid and missing data", x="Samples", y="Counts")+
-  geom_label(aes(label=n), position= position_stack(vjust = 0.5), size=3, show.legend = FALSE, color="white")
+barplot_missval(data=data_filt)
 
 ```
 
+```{r Missing value distribution}
+den_missval(data=data_filt)
+```
+
+```{r Plot imputation}
+den_imput(data=data_filt)    
+```
+
+```{r Heatmap}
+htmap(data = data_filt)
+```
