@@ -88,7 +88,6 @@ barplot_count(data = data_filt)
 ```{r Protein Coverage}
 barplot_cover(data = data_filt)+
   theme(legend.position = "none")
-
 ```
 
 ```{r Normalized data distribution}
@@ -99,10 +98,8 @@ boxplot(data=data_filt)
 densityplot(data=data_filt)
 ```
 
-
 ```{rPlot Missing data}
 barplot_missval(data=data_filt)
-
 ```
 
 ```{r Missing value distribution}

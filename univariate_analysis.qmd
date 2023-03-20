@@ -1,4 +1,3 @@
-
 ---
 title: "Univariate analysis"
 format:
@@ -21,7 +20,7 @@ editor: source
 
 Caricare le librerie e le funzioni necessarie
 
-```{r loading-libreries, echo=FALSE}
+```{r loadin-libreries, echo=FALSE}
 library(data.table)
 library(janitor)
 library(here)
@@ -41,28 +40,20 @@ library(corrmorant)
 
 source(file = here::here("r6class_app.R"))
 
-source(file = "C:/Users/MSU/Documents/GC/Analysis/theme_ggplot_test.R")
-
 # generare l'oggetto
 r6 <- QProMS$new()
 ```
 
 caricare il proteinGroups.txt, inserire il path completo.
-Scopo della funzione: caricare il file e modificarlo (rimuovere gli spazi e i caratteri che potrebbero creare problemi nell'analisi)
 
 ```{r loading-data}
-
-loading_data <- function(file_path){
-  raw_data <- data.table::fread(file_path) %>% #Carica file
-    tibble::as.tibble(.name_repair=janitor::make_clean_names) #Modifica file: il nome delle colonne senza spazi e con minuscolo
-  return(raw_data)
-}
-
-raw_data <- loading_data(file_path = here::here("proteinGroups.txt"))
-
+r6$loading_data(
+  input_path = "C:/Users/MSU/Documents/GC/Analysis/QProMS_test_functions/proteinGroups.txt",
+  input_type = "max_quant"
+)
 ```
 
-Questa funzione crea l'experimental design, ma il proteinGroups.txt deve essere creato con la colonna experiment in MaxQuant impostata come:
+questa funzione crea l'experimental design, ma il proteinGroups.txt deve essere creato con la colonna experiment in MaxQuant impostata come:
 
 condA_1
 condA_2
@@ -71,34 +62,12 @@ condB_1
 condB_2
 condB_3
 
-Data <- Partendo dal raw_data alla funzione viene detto di cercare tutte le variabili che iniziano con un dato pattern (dplyr::starts_with) a tutte le colonne (dplyr::across), modificando la tabella (mutate).
-log2?
-dplyr::na_if viene usato per sostituire tutti i valori non significativi con NA
-
-ExpDesign <- partendo da data, prima sono selezionate le colonne di interesse (gene_names e quelle che iniziano con il pattern). Poi con pivot_longer vengono create due nuove colonne (key riporta i vari lfq, mentre intensity i valori corrispondenti)
-NB: le intensities sono i log2 di ? Le NA sono quelle che rispettavano la condizione data da na_if?
-
-"distinct" permette di isolare una colonna della tabella (in questo caso key). A questo viene aggiunta una nuova colonna tramite mutate (la colonna label). Questa colonna si definisce tramite stringr::str_remove, che ha lo scopo di rimuovere "lfq..." dalla colonna key per dare come output il contenuto della colonna label.
-Con lo stesso apporccio si creano altre due colonne: condition e replicate.
-
 
 ```{r make-expdesig}
-#Creo table exp_des
-exp_design <- function(data, pattern_interest){
-  exp_des <- data %>% 
-    dplyr::mutate(dplyr::across(dplyr::starts_with(pattern_interest),  ~ log2(.) )) %>% #Vslori intensity in log2
-    dplyr::select(gene_names, dplyr::starts_with(pattern_interest)) %>% #Tolte tutte le colonne, tranne le due in ()
-    tidyr::pivot_longer(!gene_names, names_to="key", values_to= "intensity") %>% #Raggruppa tutte le lfq in unica colonna
-    dplyr::mutate(label = stringr::str_remove(key, "lfq_intensity_bc_")) %>%
-    dplyr::mutate(condition = stringr::str_remove(label, "_[^_]*$")) %>%
-    dplyr::mutate(replicate = stringr::str_remove(label, ".*_")) %>% 
-    dplyr::na_if(., -Inf) #Se le intensity sono -Inf diventano NA
-}
-
-exp_des <- exp_design(data=raw_data, pattern_interest = "lfq_intensity_bc_")
+r6$make_expdesign(
+  start_with = "lfq_intensity_bc_"
+)
 ```
-
-
 
 # Data Wrangling
 
@@ -115,7 +84,7 @@ peptides = peptides column
 unique = unique columns
 razor = razor and unique column
 
-gli ultimi 3 filtrano via (con TRUE) i potential contaminant, gli only identify by side e i reverse
+gli ultimi 3 filtano via (con TRUE) i potential contaminant, gli only identify by side e i reverse
 
 ```{r data-wrangling}
 r6$pg_preprocessing()
@@ -129,392 +98,20 @@ r6$data_wrangling(
   cont = TRUE,
   oibs = TRUE
 )
-
-# pg_preprocessing = function(){
-      ########################################################################
-      #### This function prepare the protein groups in the QProMS format ####
-      #### and remove duplicates.                                         ####
-      ########################################################################
-      
-      ### this first part remove duplicate and missing gene names
-      ### in proteinGroups.txt input
-      
-      ## Identify all duplicate gene names 
-      ## and add after __ the protein iD
-      
-      
-# self$define_colors()
-
- # define_colors <- function(){
-      n_of_color <- max(expdesign %>% dplyr::count(replicate) %>% dplyr::pull(n))
-      color_palette <- viridis::viridis(n = n_of_color , direction = -1, end = 0.70, begin = 0.30)
-    # }
- 
-
-      
-      define_tests <- function(){
-      conditions <-
-        dplyr::distinct(self$expdesign, condition) %>% pull(condition)
-      
-      tests <-
-        tidyr::expand_grid(cond1 = conditions, cond2 = conditions) %>%
-        dplyr::filter(cond1 != cond2) %>%
-        dplyr::mutate(test = paste0(cond1, "_vs_", cond2)) %>%
-        dplyr::pull(test)
-      
-      return(tests)
-    }
-      
-#Partendo da data seleziono 3 colonne (select). Modifico gene_names rimuovendo simboli (stringr::str_extract) e facendo in modo di avere soloo un gene name per ogni proteinID. Rename permette di cambiare il nome della colonna.
-#Con janitor::getdupes identifico i gene_names che hanno lo stesso valore.
-#tutte le colonne rimaste senza gene_names sono rimpiazzate facendo copia incolla delle proteinID.
-#Con right_joint unisco il file data alle due colonne che ho selezionato
-  
-      
-       
-data_standardized <- data %>% 
-  dplyr::select(protein_i_ds, gene_names, id) %>%
-  dplyr::mutate(gene_names = stringr::str_extract(gene_names, "[^;]*")) %>%
- ## every protein groups now have only 1 gene name associated to it
-  dplyr::rename(unique_gene_names = gene_names) %>%
-  janitor::get_dupes(unique_gene_names) %>%
-  dplyr::mutate(unique_gene_names = dplyr::case_when(
-  unique_gene_names != "" ~ paste0(
-  unique_gene_names, "__",
-  stringr::str_extract(protein_i_ds, "[^;]*")),
-   TRUE ~ stringr::str_extract(protein_i_ds, "[^;]*")
-           )) %>%
-        dplyr::select(unique_gene_names, id) %>%
-        dplyr::right_join(data, by = "id") %>%
-        dplyr::mutate(
-          gene_names = dplyr::case_when(unique_gene_names != "" ~ unique_gene_names,
-                                        TRUE ~ gene_names)
-        ) %>%
-        dplyr::select(-unique_gene_names) %>%
-        dplyr::mutate(gene_names = dplyr::if_else(
-          gene_names == "",
-          stringr::str_extract(protein_i_ds, "[^;]*"),
-          gene_names
-        )) %>%
-        dplyr::mutate(gene_names = stringr::str_extract(gene_names, "[^;]*")) %>% 
-        dplyr::select(
-          gene_names,
-          dplyr::all_of(expdesign$key),
-          peptides,
-          razor_unique_peptides,
-          unique_peptides,
-          reverse,
-          potential_contaminant,
-          only_identified_by_site
-        ) %>% 
-        tidyr::pivot_longer(
-          !c(gene_names,
-             peptides,
-             razor_unique_peptides,
-             unique_peptides,
-             reverse,
-             potential_contaminant,
-             only_identified_by_site),
-          names_to = "key",
-          values_to = "raw_intensity"
-        ) %>% 
-        dplyr::inner_join(., expdesign, by = "key") %>%   #aggiunge righe e colonne che matchano tra expdesign e data
-        dplyr::mutate(bin_intensity = dplyr::if_else(is.na(raw_intensity), 0, 1)) %>%  #Creo nuova colonna. 1 se valore esite, 0 se NA
-        dplyr::select(-key)
-      
-      # self$data <- data_standardized
-#    }
-
-# r6$data_wrangling(
-#   valid_val_filter = "alog",
-#   valid_val_thr = 0.75,
-#   pep_filter = "peptides",
-#   pep_thr = 2,
-#   rev = TRUE,
-#   cont = TRUE,
-#   oibs = TRUE
-# )
-
-#data_wrangling <- function(valid_val_filter = "alog", valid_val_thr = 0.75,
-#                          pep_filter = "peptides", pep_thr = 2,
-#                          rev = TRUE, cont = TRUE, oibs = TRUE, rescue_cont = NULL) 
-       
-      ##############################################################
-      #### this function is divided in 2 steps:                 ####
-      #### the first apply filer specific to maxquant input.    ####
-      #### the second part filer the data base on valid values. ####
-      ##############################################################
-      
-      # data <- self$data 
-
-pep_filter = "peptides" 
-pep_thr = 2
-rev = TRUE
-cont = TRUE
-oibs = TRUE
-
-        ### pep filter puo essere:
-        ## c("peptides", "unique", "razor")
-        
-        data_wrang <- data_standardized %>% 
-            # dplyr::mutate(potential_contaminant = dplyr::case_when(
-            # gene_names %in% rescue_cont ~ "", TRUE ~ potential_contaminant)) %>% #Mette "" per ogni gene_names che si trova in rescue_cont
-          ## remove reverse, potentialcontaminant and oibs from data base on user input
-          {if(rev)dplyr::filter(., !reverse == "+") else .} %>%
-          {if(cont)dplyr::filter(., !potential_contaminant == "+") else .} %>%
-          {if(oibs)dplyr::filter(., !only_identified_by_site == "+") else .} %>% 
-          ## filter on peptides:
-          {if(pep_filter == "peptides"){dplyr::filter(., peptides >= pep_thr)}
-            else if (pep_filter == "unique") {dplyr::filter(., unique_peptides >= pep_thr)}
-            else {dplyr::filter(., razor_unique_peptides >= pep_thr)}}
-
-#Quello sopra ma scritto in versione estesa per tutte le condizioni
-# data_wrang <- data %>%
-# if(cont == TRUE) {
-#   dplyr::filter(data, potential_contaminant == "")
-#   } else{
-#   data
-# } %>%
-#   if(rev==TRUE) {
-#     dplyr::filter(data, !reverse=="+")
-#     } else {
-#   data
-# } %>%
-#   if(oibs==TRUE) {
-#     dplyr::filter(data, !only_identified_by_site=="+")
-#     } else {
-#     data
-# } %>%
-# 
-# if(pep_filter == "peptides") {
-#   dplyr::filter(data, peptides >= 2)
-# } else if(pep_filter == "unique"){
-#   dplyr::filter(data, unique_peptides >= 2)
-# }else{
-#   dplyr::filter(data, razor_unique_peptides >= 2)
-# } 
-  
-valid_val_filter = "alog"
-valid_val_thr = 0.75
-
-filtered_data <- data_wrang %>%
-        {if(valid_val_filter == "total")dplyr::group_by(., gene_names)
-          else dplyr::group_by(., gene_names, condition)} %>% 
-        dplyr::mutate(miss_val = dplyr::n() - sum(bin_intensity)) %>% 
-        dplyr::mutate(n_size = dplyr::n()) %>%
-        dplyr::ungroup() %>%
-        dplyr::group_by(gene_names) %>%
-        ## rage compreso tra 0 e 100% espresso in valori tra 0 e 1
-        {if(valid_val_filter == "alog") dplyr::filter(., any(miss_val <= round(n_size * (1 - valid_val_thr), 0)))
-          else dplyr::filter(., all(miss_val <= round(n_size * (1 - valid_val_thr), 0)))} %>%
-        dplyr::ungroup() %>%
-        dplyr::select(gene_names, label, condition, replicate, bin_intensity, raw_intensity) %>% 
-        dplyr::rename(intensity = raw_intensity)
-      
 ```
 
 questo grafico mostra il risultato dei filtri sopra selezionati
 
 ```{r protein-counts}
-# r6$plot_protein_counts() 
-# plot_protein_counts = function(){
-      
-      # controllare che ci sia il self$filtered_data
-      # data <- self$filtered_data
-      # expdes <- self$expdesign
-p <- filtered_data %>%
-        dplyr::group_by(label) %>%
-        dplyr::summarise(counts = sum(bin_intensity)) %>%
-        dplyr::ungroup() %>%
-        dplyr::inner_join(., expdesign, by = "label") %>%
-        dplyr::mutate(replicate = as.factor(replicate)) %>%
-        dplyr::group_by(condition) %>% 
-  #Costruzione del grafico
-        echarts4r::e_charts(replicate, renderer = "svg") %>%
-        echarts4r::e_bar(counts) %>%
-        echarts4r::e_x_axis(name = "Replicates") %>%
-        echarts4r::e_y_axis(name = "Counts") %>%
-        echarts4r::e_tooltip(trigger = "item") %>%
-        echarts4r::e_color(color_palette) %>%
-        echarts4r::e_theme("QProMS_theme") %>% 
-        echarts4r::e_y_axis(
-          name = "Counts",
-          nameLocation = "center",
-          nameTextStyle = list(
-            fontWeight = "bold",
-            fontSize = 16,
-            lineHeight = 60
-          )
-        ) %>%
-        echarts4r::e_x_axis(
-          name = "Replicate",
-          nameLocation = "center",
-          nameTextStyle = list(
-            fontWeight = "bold",
-            fontSize = 14,
-            lineHeight = 60
-          )
-        ) %>% 
-        echarts4r::e_toolbox_feature(feature = c("saveAsImage", "restore", "dataView"))
-      
-    #   return(p)
-    # }
+r6$plot_protein_counts() 
 ```
-
-```{r protein-counts-static}
-p <- filtered_data %>%
-        dplyr::group_by(label) %>%
-        dplyr::summarise(counts = sum(bin_intensity)) %>%
-        dplyr::ungroup() %>%
-        dplyr::inner_join(., expdesign, by = "label") %>%
-        dplyr::mutate(replicate = as.factor(replicate)) %>%
-        dplyr::group_by(condition)
-
- n_of_color <- max(expdesign %>% dplyr::count(replicate) %>% dplyr::pull(n))
-      color_palette <- viridis::viridis(n = n_of_color , direction = -1, end = 0.70, begin = 0.30)
-
-      
-       
-ggplot(p,aes(x= label, y= counts, fill=condition))+
-  geom_bar(stat="identity", width = width_boxplot, color="black")+
-  scale_fill_manual(values = color_palette)+
-  theme_cuc()+
-  theme(plot.title = element_text(hjust = 0.5, size = 18), 
-        legend.position = 'right',
-        axis.title.x = element_text(size=15),
-        axis.title.y = element_text(size = 15),
-        axis.text.x = element_text(size=10, angle = 30),
-        axis.text.y = element_text(size = 10))+
-  labs(title= "Protein counts by condition")+
-  geom_text(aes(label=counts), vjust=-0.2, size=4) 
-
-
-  #geom_label(aes(label=counts), fill="white", vjust=-0.2, size=4, fontface="bold")
-plotx <- function(data, width_boxplot = 0.6)
-  
-  plotx(data = data_filtered, width_boxplot = 0.9)
-             
-```
-
 
 ```{r valid-values}
 r6$plot_protein_coverage()
-
-plot_protein_coverage = function(){
-      
-      # controllare che ci sia il self$filtered_data
-      data <- self$filtered_data
-      
-      p <- data %>%
-        dplyr::group_by(gene_names) %>%
-        dplyr::summarise(counts = sum(bin_intensity)) %>%
-        dplyr::ungroup() %>%
-        dplyr::select(counts) %>%
-        table() %>%
-        tibble::as_tibble() %>%
-        dplyr::rename(occurrence = n) %>%
-        echarts4r::e_charts(counts, renderer = "svg") %>%
-        echarts4r::e_bar(occurrence) %>%
-        echarts4r::e_y_axis(name = "Counts") %>%
-        echarts4r::e_tooltip(trigger = "item") %>%
-        echarts4r::e_color(self$color_palette) %>%
-        echarts4r::e_theme("QProMS_theme") %>% 
-        echarts4r::e_y_axis(
-          name = "Counts",
-          nameLocation = "center",
-          nameTextStyle = list(
-            fontWeight = "bold",
-            fontSize = 16,
-            lineHeight = 60
-          )
-        ) %>% 
-        echarts4r::e_toolbox_feature(feature = c("saveAsImage", "restore", "dataView"))
-      
-      return(p)
-    }
 ```
-
-```{r Plot_protein_coverage_static}
-
-p1 <- filtered_data %>%
-  dplyr::group_by(gene_names) %>%
-  dplyr::summarise(counts = sum(bin_intensity)) %>%
-  dplyr::ungroup() %>%
-  dplyr::count(counts) %>% 
-  dplyr::rename(occurrence = n) 
-
-
-
-ggplot(p1,aes(x= counts, y= occurrence))+
-  geom_bar(stat="identity", width = 0.6, color="black", fill="#21908CFF")+
-  # scale_y_discrete()+
-  theme_minimal()+
-  theme(plot.title = element_text(hjust = 0.5, size = 18), 
-        axis.title.x = element_text(size=15),
-        axis.title.y = element_text(size = 15),
-        axis.text.x = element_text(size=10),
-        axis.text.y = element_text(size = 10))+
-  labs(title= "Protein coverage")+
-  geom_text(aes(label=occurrence), hjust=0.5, vjust=-0.5, size=4)
-
-```
-
 
 ```{r cv}
 r6$plot_cv()
-    plot_cv = function(){
-      
-      # controllare che ci sia il self$filtered_data
-      data <- self$filtered_data
-      
-      p <- data %>% 
-        dplyr::group_by(gene_names, condition) %>% 
-        dplyr::summarise(
-          mean = mean(intensity, na.rm = TRUE),
-          sd = sd(intensity, na.rm = TRUE),
-          CV = round(sd / mean, 3)
-        ) %>% 
-        dplyr::ungroup() %>% 
-        dplyr::group_by(condition) %>% 
-        echarts4r::e_chart() %>% 
-        echarts4r::e_boxplot(
-          CV,
-          colorBy = "data",
-          outliers = FALSE,
-          itemStyle = list(color = "#DADADA", borderWidth = 2)
-        ) %>%  
-        echarts4r::e_tooltip(trigger = "axis") %>% 
-        echarts4r::e_title(text = "Sample CV", subtext = "Coefficient of variation") %>% 
-        echarts4r::e_color(self$color_palette)
-      
-      return(p)
-    }
-
-```
-
-```{r CV_plot static}
-      
-p2 <- filtered_data %>%
-  dplyr::group_by(gene_names, condition) %>%
-  dplyr::summarise(mean = mean(intensity, na.rm = TRUE),
-                   sd = sd(intensity, na.rm = TRUE),
-                   CV = round(sd / mean, 3)) %>%
-  dplyr::ungroup() %>%
-  dplyr::group_by(condition) 
-      
-
-ggplot(p2, aes(x=condition, y=CV, fill=condition))+
-  geom_boxplot(width=0.5, color="black")+
-  scale_fill_manual(values = color_palette)+
-  theme_minimal()+
-  theme(plot.title = element_text(hjust = 0.5, size = 18),
-        legend.position = 'right',
-        axis.title.x = element_text(size = 15),
-        axis.title.y = element_text(size = 15),
-        axis.text = element_text(size = 10))+
-  labs(title="Coefficient variation plot")
-      
-      
 ```
 
 ora bisogna verificare che le distribuzioni siano normali 
@@ -523,129 +120,7 @@ ora bisogna verificare che le distribuzioni siano normali
 
 ```{r plot-dis}
 r6$plot_distribution()
-
-    normalization = function(norm_methods = "None"){
-      
-      # store inputs for summary table
-      self$norm_methods <- norm_methods
-      
-      data <- self$filtered_data
-      
-      if(norm_methods == "None"){
-        self$is_norm <- FALSE
-      }else{
-        self$is_norm <- TRUE
-        
-        ## convert tibble data into a matrix
-        raw_matrix <- data %>%
-          tidyr::pivot_wider(id_cols = gene_names,
-                             names_from = label,
-                             values_from = intensity) %>%
-          tibble::column_to_rownames("gene_names") %>%
-          as.matrix()
-        
-        set.seed(11)
-        ## Variance stabilization transformation on matrix
-        vsn_fit <- vsn::vsn2(2 ^ raw_matrix, verbose = FALSE)
-        norm_matrix <- vsn::predict(vsn_fit, 2 ^ raw_matrix)
-        
-        ## return a table with QProMS object format
-        normalized_data <- norm_matrix %>%
-          tibble::as_tibble(rownames = "gene_names") %>%
-          tidyr::pivot_longer(cols = !gene_names,
-                              names_to = "label",
-                              values_to = "norm_intensity") %>%
-          dplyr::full_join(data, .x, by = c("gene_names", "label")) %>%
-          dplyr::mutate(intensity = norm_intensity) %>% 
-          dplyr::select(-norm_intensity) %>% 
-          dplyr::relocate(intensity, .after = last_col())
-        
-        self$normalized_data <- normalized_data
-      }
-      
-    }
-
-    plot_distribution = function(){
-      
-      if(self$is_norm){
-        data <- self$normalized_data
-      }else{
-        data <- self$filtered_data
-      }
-      
-      p <- data %>%
-        dplyr::mutate(intensity = round(intensity, 2)) %>%
-        dplyr::group_by(condition, label) %>%
-        echarts4r::e_charts(renderer = "svg") %>%
-        echarts4r::e_boxplot(
-          intensity,
-          colorBy = "data",
-          layout = 'horizontal',
-          outliers = FALSE,
-          itemStyle = list(borderWidth = 2)
-        ) %>%
-        echarts4r::e_tooltip(trigger = "item") %>%
-        echarts4r::e_color(self$color_palette) %>%
-        echarts4r::e_theme("QProMS_theme") %>% 
-        echarts4r::e_y_axis(
-          name = "Intensity",
-          nameLocation = "center",
-          nameTextStyle = list(
-            fontWeight = "bold",
-            fontSize = 16,
-            lineHeight = 60
-          )
-        ) %>% 
-        echarts4r::e_toolbox_feature(feature = "saveAsImage")
-      
-      return(p)
-    }
 ```
-
-```{r Data normalization}
-
-raw_matrix <- filtered_data %>%
-  tidyr::pivot_wider(id_cols = gene_names,
-                     names_from = label,
-                     values_from = intensity) %>%
-  tibble::column_to_rownames("gene_names") %>%
-  as.matrix()
-## Variance stabilization transformation on matrix
-# vsn_fit <- vsn::vsn2(2 ^ raw_matrix, verbose = FALSE)
-# norm_matrix <- vsn::predict(vsn_fit, 2 ^ raw_matrix)
-        
-## return a table with QProMS object format
-# normalized_data <- norm_matrix %>%
-#   tibble::as_tibble(rownames = "gene_names") %>% 
-#   tidyr::pivot_longer(cols = !gene_names,
-#                       names_to = "label",
-#                       values_to = "norm_intensity") %>% 
-#   dplyr::full_join(filtered_data, by = c("gene_names", "label"), copy=TRUE) %>%
-#   dplyr::mutate(intensity = norm_intensity) %>% 
-#   dplyr::select(-norm_intensity) %>% 
-#   dplyr::relocate(intensity, .after = last_col()) %>% 
-#   dplyr::mutate(intensity = round(intensity, 2)) %>% 
-#   dplyr::group_by(condition, label)
-        
-#NB: in questo caso i dati erano normalizzati, quindi filtered_data e normalized_data sono uguali
-```
-
-```{r Plot normalized data distribution static}
-     
-ggplot(filtered_data, aes(x=label, y=intensity, fill=condition))+
-  geom_boxplot(width=0.5, color="black")+
-  scale_fill_manual(values = color_palette)+
-  theme_minimal()+
-  theme(plot.title = element_text(hjust = 0.5, size = 18),
-        legend.position = 'right',
-        axis.title.x = element_text(size = 15),
-        axis.title.y = element_text(size = 15),
-        axis.text = element_text(size = 10, angle = 30))+
-  labs(title="Normalized data distribution")
-
-
-```
-
 
 nel caso le distribuzioni non siano normali, è possibile noralizzarle con la seguente funzione:
 per ora c'è solo l'opzione con la vsn
@@ -660,184 +135,11 @@ ora bisogna decidere come imputare i missing data rimanenti, utilizzare i seguen
 
 ```{r plot-missval1}
 r6$plot_missing_data()
-
- plot_missing_data <- function(){
-      
-      # controllare che ci sia il self$filtered_data
-      data <- self$filtered_data
-      
-      p <- data %>%
-        dplyr::group_by(label) %>%
-        dplyr::mutate(bin_intensity = dplyr::if_else(bin_intensity == 1, "Valid", "Missing")) %>%
-        dplyr::count(bin_intensity) %>%
-        tidyr::pivot_wider(id_cols = label, names_from = bin_intensity, values_from = n) %>%
-        {if(ncol(.) == 2) dplyr::mutate(., Missing = 0)else . } %>%
-        dplyr::ungroup() %>%
-        dplyr::mutate(total = Valid + Missing) %>%
-        dplyr::mutate(perc_present = paste0(round(Valid*100/total, 1), "%")) %>%
-        dplyr::mutate(perc_missing = paste0(round(Missing*100/total, 1), "%")) %>%
-        echarts4r::e_charts(label, renderer = "svg") %>%
-        echarts4r::e_bar(Valid, stack = "grp", bind = perc_present) %>%
-        echarts4r::e_bar(Missing, stack = "grp", bind = perc_missing) %>%
-        echarts4r::e_x_axis(name = "Samples", axisLabel = list(interval = 0, rotate = 45)) %>%
-        echarts4r::e_y_axis(name = "Counts") %>%
-        echarts4r::e_tooltip(trigger = "item") %>%
-        echarts4r::e_color(c("#21918c", "#440154")) %>%
-        echarts4r::e_theme("QProMS_theme") %>% 
-        echarts4r::e_y_axis(
-          name = "Counts",
-          nameLocation = "center",
-          nameTextStyle = list(
-            fontWeight = "bold",
-            fontSize = 16,
-            lineHeight = 60
-          )
-        ) %>% 
-        echarts4r::e_toolbox_feature(feature = c("saveAsImage", "restore", "dataView"))
-      
-      return(p)
-    }
 ```
 
-```{r Plot_missing_data_static}
-p3 <- filtered_data %>%
-  dplyr::group_by(label, condition) %>% 
-  dplyr::mutate(bin_intensity = dplyr::if_else(bin_intensity == 1, "Valid", "Missing")) %>%
-  dplyr::count(bin_intensity) %>% 
-  tidyr::pivot_wider(id_cols = NULL, names_from = bin_intensity, values_from = n) %>% 
-  {if(ncol(.) == 2) dplyr::mutate(., Missing = 0)else . } %>% 
-  dplyr::ungroup() %>%
-  dplyr::mutate(total = Valid + Missing) %>%
-  dplyr::mutate(perc_present = paste0(round(Valid*100/total, 1), "%")) %>%
-  dplyr::mutate(perc_missing = paste0(round(Missing*100/total, 1), "%"))
-
-#Plot only valid data 
-ggplot(p3,aes(x= label, y= Valid, fill=condition))+
-  geom_bar(stat="identity", width = 0.6, color="black")+
-  scale_fill_manual(values = color_palette)+
-  theme_minimal()+
-  theme(plot.title = element_text(hjust = 0.5, size = 18), 
-        legend.position = 'right',
-        axis.title.x = element_text(size=15),
-        axis.title.y = element_text(size = 15),
-        axis.text.x = element_text(size=10, angle = 30),
-        axis.text.y = element_text(size = 10))+
-  labs(title= "Plot valid data", x="Samples", y="Counts")+
-  geom_text(aes(label=Valid), vjust=-0.2, size=4) 
-
-#Plot only missing data
-ggplot(p3,aes(x= label, y= Missing, fill=condition))+
-  geom_bar(stat="identity", width = 0.6, color="black")+
-  scale_fill_manual(values = color_palette)+
-  theme_minimal()+
-  theme(plot.title = element_text(hjust = 0.5, size = 18), 
-        legend.position = 'right',
-        axis.title.x = element_text(size=15),
-        axis.title.y = element_text(size = 15),
-        axis.text.x = element_text(size=10, angle = 30),
-        axis.text.y = element_text(size = 10))+
-  labs(title= "Plot missing data", x="Samples", y="Counts")+
-  geom_text(aes(label=Missing), vjust=-0.2, size=4) 
-
-#Summary plot missing/valid data
-p3.1 <-filtered_data %>%
-  dplyr::group_by(label) %>% 
-  dplyr::mutate(bin_intensity = dplyr::if_else(bin_intensity == 1, "Valid", "Missing")) %>%
-  dplyr::count(bin_intensity) %>% 
-  dplyr::mutate(bin_intensity = as.factor(bin_intensity)) %>% 
-  dplyr::rename(Data= bin_intensity)
-
-ggplot(p3.1,aes(x= label, y= n, fill=Data))+
-  geom_bar(stat="identity", width = 0.8, color="black")+
-  scale_fill_manual(values = c("#21908CFF", "#481567FF"))+
-  theme_minimal()+
-  theme(plot.title = element_text(hjust = 0.5, size = 18), 
-        legend.position = 'right',
-        axis.title.x = element_text(size=15),
-        axis.title.y = element_text(size = 15),
-        axis.text.x = element_text(size=10, angle = 30),
-        axis.text.y = element_text(size = 10))+
-  labs(title= "Plot valid and missing data", x="Samples", y="Counts")+
-  geom_label(aes(label=n), position= position_stack(vjust = 0.5), size=3, show.legend = FALSE, color="white")
-  #geom_text(aes(label=n), position= position_stack(vjust = 0.5), size=3, fontface="bold", color="white")
-```
-
-
-```{r plot_missval_distribution}
+```{r plot-missval2}
 r6$plot_missval_distribution()
-    plot_missval_distribution = function(){
-      
-      # controllare che ci sia il self$filtered_data
-      data <- self$filtered_data
-      
-      p <- data %>%
-        dplyr::group_by(gene_names) %>%
-        dplyr::summarise(mean = mean(intensity, na.rm = TRUE),
-                         missval = any(is.na(intensity))) %>%
-        dplyr::ungroup() %>%
-        dplyr::mutate(missing_value = dplyr::if_else(missval, "Missing", "Valid")) %>%
-        dplyr::mutate(missing_value = factor(missing_value, levels = c("Valid", "Missing"))) %>%
-        dplyr::group_by(missing_value) %>%
-        echarts4r::e_charts(renderer = "svg") %>%
-        echarts4r::e_density(
-          mean,
-          smooth = TRUE,
-          areaStyle = list(opacity = 0),
-          symbol = "none"
-        ) %>%
-        echarts4r::e_y_axis(
-          name = "Densiry",
-          nameLocation = "center",
-          nameTextStyle = list(
-            fontWeight = "bold",
-            fontSize = 16,
-            lineHeight = 60
-          )
-        ) %>%  
-        echarts4r::e_x_axis(
-          name = "log2 Intensity",
-          nameLocation = "center",
-          nameTextStyle = list(
-            fontWeight = "bold",
-            fontSize = 16,
-            lineHeight = 60
-          )
-        ) %>%
-        echarts4r::e_color(c("#21918c", "#440154")) %>% 
-        echarts4r::e_toolbox_feature(feature = c("saveAsImage", "restore"))
-      
-      return(p)
-    }
-
 ```
-
-```{r Plot_missval_distribution_static}
-    
-p4 <- filtered_data %>%
-  dplyr::group_by(gene_names) %>%
-  dplyr::summarise(mean = mean(intensity, na.rm = TRUE),
-                   missval = any(is.na(intensity))) %>%
-  dplyr::ungroup() %>%
-  dplyr::mutate(missing_value = dplyr::if_else(missval, "Missing", "Valid")) %>%
-  dplyr::mutate(missing_value = factor(missing_value, levels = c("Valid", "Missing"))) %>%
-  dplyr::group_by(missing_value)
-
-ggplot(p4,aes(x= mean, color=missing_value))+
-  geom_density(size=0.8)+
-  scale_color_manual(values = c("#481567FF", "#21908CFF"))+
-  theme_minimal()+
-  theme(plot.title = element_text(hjust = 0.5, size = 18), 
-        legend.position = 'right',
-        legend.title = element_blank(),
-        axis.title.x = element_text(size=15),
-        axis.title.y = element_text(size = 15),
-        axis.text.x = element_text(size=10),
-        axis.text.y = element_text(size = 10))+
-  labs(title= "Density plot", x="Log2Intensity", y="Density")
-
-
-```
-
 
 ```{r plot-missval3}
 r6$plot_imputation()
@@ -862,294 +164,21 @@ per vedere l'effetto dell'imputazione
 r6$plot_imputation()
 ```
 
-```{r Plot imputation static}
-data_mixed <- filtered_data %>%
-            dplyr::group_by(gene_names, condition) %>%
-            dplyr::mutate(for_mean_imp = dplyr::if_else((sum(bin_intensity) / dplyr::n()) >= 0.75, TRUE, FALSE)) %>%
-            dplyr::mutate(mean_grp = mean(intensity, na.rm = TRUE)) %>%
-            dplyr::ungroup() %>%
-            dplyr::mutate(imp_intensity = dplyr::case_when(
-              bin_intensity == 0 & for_mean_imp ~ mean_grp,
-              TRUE ~ as.numeric(intensity))) %>%
-            dplyr::mutate(intensity = imp_intensity) %>% 
-            dplyr::select(-c(for_mean_imp, mean_grp, imp_intensity))
-
-imputed_data <- data_mixed %>%
-  dplyr::group_by(label) %>%
-# Define statistic to generate the random distribution relative to sample
-  dplyr::mutate(mean = mean(intensity, na.rm = TRUE),
-                sd = sd(intensity, na.rm = TRUE),
-                n = sum(!is.na(intensity)),
-                total = nrow(data) - n) %>%
-  dplyr::ungroup() %>%
-# Impute missing values by random draws from a distribution
-# which is left-shifted by parameter 'shift' * sd and scaled by parameter 'scale' * sd.
-  dplyr::mutate(imp_intensity = dplyr::case_when(is.na(intensity) ~ rnorm(total,
-                                                                          mean = (mean - 1.8 * sd), 
-                                                                          sd = sd * 0.3),
-                                                 TRUE ~ intensity)) %>%
-  dplyr::mutate(intensity = imp_intensity) %>%
-  dplyr::select(-c(mean, sd, n, total, imp_intensity)) %>%
-  dplyr::group_by(condition)
-
-
-ggplot(imputed_data, aes(x=intensity, color=condition))+
-  geom_density(lwd=0.8)+
-  scale_color_manual(values = c("#43BF71FF", "#21908CFF", "#35608DFF"))+
-  theme_minimal()+
-  theme(plot.title = element_text(hjust = 0.5, size = 18), 
-        legend.position = 'right',
-        legend.title = element_blank(),
-        axis.title.x = element_text(size=15),
-        axis.title.y = element_text(size = 15),
-        axis.text.x = element_text(size=10),
-        axis.text.y = element_text(size = 10))+
-  labs(title= "Imputation plot", x="Intensity", y="Density")
-```
-
 # Correlation plot
 
 ```{r plot-corr}
 r6$plot_correlation_interactive()
-
-plot_correlation_interactive = function(){
-      # define if use normalize or row intensity
-      if(self$is_norm){
-        data <- self$normalized_data
-      }else{
-        data <- self$filtered_data
-      }
-      
-      mat <- data %>%
-        dplyr::select(gene_names, label, intensity) %>%
-        tidyr::pivot_wider(names_from = label, values_from = intensity) %>%
-        dplyr::filter(dplyr::if_all(.cols = dplyr::everything(), .fns = ~ !is.na(.x))) %>%
-        tibble::column_to_rownames("gene_names") %>%
-        cor() %>% 
-        round(digits = 2)
-      
-      p <- mat %>% 
-        echarts4r::e_charts(renderer = "svg") %>%
-        echarts4r::e_correlations(order = "hclust", visual_map = FALSE) %>%
-        echarts4r::e_x_axis(axisLabel = list(interval = 0, rotate = 45)) %>%
-        echarts4r::e_y_axis(axisLabel = list(interval = 0, rotate = 0), position = "right") %>%
-        echarts4r::e_tooltip(trigger = "item", formatter = htmlwidgets::JS("
-          function(params){
-          return('X: ' + params.value[0] + '<br />Y: ' + params.value[1] + '<br />Value: ' + params.value[2])
-          }")) %>%
-        echarts4r::e_title("Correlation matrix", subtext = "Pearson correlation") %>%
-        echarts4r::e_visual_map(
-          min = min(mat),
-          max = 1,
-          bottom = 150,
-          inRange = list(color = c("#440154", "#31688e", "#35b779"))
-        ) %>%
-        echarts4r::e_theme("QProMS_theme") %>% 
-        echarts4r::e_toolbox_feature(feature = c("saveAsImage"))
-      
-      return(p)
-    }
 ```
 
-```{r plot-corr-static 1}
-#r6$plot_correlation_static(cor_method = "pearson")
-mat <- filtered_data %>%
-  dplyr::select(gene_names, label, intensity) %>%
-  tidyr::pivot_wider(names_from = label, values_from = intensity) %>%
-  dplyr::filter(dplyr::if_all(.cols = dplyr::everything(), .fns = ~ !is.na(.x))) %>%
-  tibble::column_to_rownames("gene_names") %>%
-  cor() %>%
-  round(digits = 2)
-
-library(ggcorrplot)
-
-ggcorrplot(mat,
-           show.legend = TRUE ,
-           hc.order=TRUE,
-           title = "Correlation Plot",
-           colors = c("#481567FF", "#31688e", "#35b779"),
-           outline.col="white", 
-           ggtheme = ggplot2::theme_minimal(),
-           lab = TRUE,
-           lab_size = 2.5)
+```{r plot-corr-static}
+r6$plot_correlation_static(cor_method = "pearson")
 ```
-
-```{r Plot Correlation Static 2}
-library(ComplexHeatmap)
-
-Heatmap(mat,
-        name="Correlation",
-        col = color_palette,
-        column_title = "Correlation plot",
-        column_title_gp=gpar(fontsize=18),
-        cluster_rows = FALSE,
-        cluster_columns = FALSE)
-
-
-```
-
 
 # PCA plot
+
 ```{r pca}
 r6$plot_pca(view_3d = FALSE)
-
- # verificare che ci sia
-      data <- self$imputed_data
-      
-      ## generate a matrix from imputed intensiy
-      mat <- data %>%
-        dplyr::select(gene_names, label, intensity) %>%
-        tidyr::pivot_wider(id_cols = "gene_names",
-                           names_from = "label",
-                           values_from = "intensity") %>%
-        tibble::column_to_rownames("gene_names") %>%
-        as.matrix()
-      
-      ## perform PCA
-      
-      pca <- prcomp(t(mat), center = TRUE, scale = TRUE) 
-      
-      ## calculate persentage of each PC
-      pca_var <- pca$sdev^2
-      pca_var_perc <- round(pca_var/sum(pca_var)*100, 1)
-      
-      ## create a data.frame for the first 3 PC
-      pca_table <- data.frame(
-        label = rownames(pca$x),
-        x = pca$x[, 1],
-        y = pca$x[, 2],
-        z = pca$x[, 3]
-      ) %>% 
-        dplyr::left_join(self$expdesign, by = "label") 
-      
-      ## generate plot
-      if(!view_3d){
-        p <- pca_table %>%
-          dplyr::group_by(condition) %>%
-          echarts4r::e_chart(x, renderer = "svg") %>%
-          echarts4r::e_scatter(y, symbol_size = c(10, 10), bind = replicate) %>%
-          echarts4r::e_tooltip(
-            trigger = "item",
-            formatter = htmlwidgets::JS("
-        function(params){
-          return('Rep: ' + params.name);
-        }
-      ")
-          ) %>%
-          echarts4r::e_title(text = "PCA", subtext = "Principal component analysis") %>%
-          echarts4r::e_x_axis(
-            name = paste0("PC1 - ", pca_var_perc[1], " %"),
-            nameLocation = "center",
-            nameTextStyle = list(
-              fontWeight = "bold",
-              fontSize = 15,
-              lineHeight = 50
-            )
-          ) %>%
-          echarts4r::e_y_axis(
-            name = paste0("PC2 - ", pca_var_perc[2], " %"),
-            nameLocation = "center",
-            nameTextStyle = list(
-              fontWeight = "bold",
-              fontSize = 15,
-              lineHeight = 50
-            )
-          ) %>% 
-          echarts4r::e_color(self$color_palette) %>% 
-          echarts4r::e_toolbox_feature(feature = c("saveAsImage", "restore", "dataView"))
-      }else{
-        p <- pca_table %>%
-          dplyr::group_by(condition) %>%
-          echarts4r::e_chart(x) %>%
-          echarts4r::e_scatter_3d(y, z, symbol_size = c(10, 10), bind = replicate) %>%
-          echarts4r::e_tooltip(
-            trigger = "item",
-            formatter = htmlwidgets::JS("
-        function(params){
-          return('Rep: ' + params.name);
-        }
-      ")
-          ) %>%
-          echarts4r::e_title(text = "PCA", subtext = "Principal component analysis") %>%
-          echarts4r::e_x_axis_3d(
-            name = paste0("PC1 - ", pca_var_perc[1], " %"),
-            nameLocation = "center",
-            nameTextStyle = list(
-              fontWeight = "bold",
-              fontSize = 15,
-              lineHeight = 50
-            )
-          ) %>%
-          echarts4r::e_y_axis_3d(
-            name = paste0("PC2 - ", pca_var_perc[2], " %"),
-            nameLocation = "center",
-            nameTextStyle = list(
-              fontWeight = "bold",
-              fontSize = 15,
-              lineHeight = 50
-            )
-          ) %>%
-          echarts4r::e_z_axis_3d(
-            name = paste0("PC3 - ", pca_var_perc[3], " %"),
-            nameLocation = "center",
-            nameTextStyle = list(
-              fontWeight = "bold",
-              fontSize = 15,
-              lineHeight = 50
-            )
-          ) %>%
-          echarts4r::e_legend() %>% 
-          echarts4r::e_color(self$color_palette) %>% 
-          echarts4r::e_toolbox_feature(feature = c("saveAsImage", "restore"))
-      }
-      
-      return(p)
-    
 ```
-
-```{r PCA}
-mat <- imputed_data %>% 
-  dplyr::select(gene_names, label, intensity) %>%
-  tidyr::pivot_wider(id_cols = "gene_names",
-                     names_from = "label",
-                     values_from = "intensity") %>%
-  tibble::column_to_rownames("gene_names") %>%
-  as.matrix()
-      
-## perform PCA
-
-pca <- prcomp(t(mat), center = TRUE, scale = TRUE) 
-      
-## calculate percentage of each PC
-pca_var <- pca$sdev^2
-pca_var_perc <- round(pca_var/sum(pca_var)*100, 1)
-      
-## create a data.frame for the first 3 PC
-pca_table <- data.frame(label = rownames(pca$x),
-                        x = pca$x[, 1],
-                        y = pca$x[, 2],
-                        z = pca$x[, 3]) %>% 
-  dplyr::left_join(expdesign, by = "label") %>% 
-  group_by(condition)
-      
-## generate plot
-
-ggplot(pca_table, aes(x=x, y=y),group=condition)+
-  geom_point(size=3, shape=19, aes(color=condition))+
-  theme_minimal()+
-  geom_hline(yintercept = 0, linetype="longdash")+
-  geom_vline(xintercept = 0, linetype="longdash")+
-  scale_color_manual(values = c("#43BF71FF", "#21908CFF", "#35608DFF"))+
-  theme(plot.title = element_text(hjust = 0.5, size = 18),
-        legend.position = 'right',
-        axis.title.x = element_text(size = 15),
-        axis.title.y = element_text(size = 15),
-        axis.text = element_text(size = 10))+
-  labs(title="PCA", subtitle = "Principal component analysis", x="PC1", y="PC2")+
-  geom_text(aes(label=replicate), size=3, position = "dodge", hjust=1.5)
-
-```
-
 
 # statistics
 
@@ -1179,58 +208,6 @@ r6$stat_t_test(
   fc = 1,
   alpha = 0.05
 )
-
-
-stat_t_test_single = function(data, test, fc, alpha, p_adj_method, ...){
-      
-      cond_1 <- stringr::str_split(test, "_vs_")[[1]][1]
-      cond_2 <- stringr::str_split(test, "_vs_")[[1]][2]
-      
-      self$univariate <- TRUE
-      self$fold_change <- fc
-      
-      mat <- data %>%
-        dplyr::filter(condition == cond_1 | condition == cond_2) %>%
-        dplyr::mutate(label_test = paste(condition, replicate, sep = "_")) %>%
-        tidyr::pivot_wider(id_cols = "gene_names",
-                           names_from = "label_test",
-                           values_from = "intensity") %>%
-        tibble::column_to_rownames("gene_names") %>%
-        dplyr::relocate(dplyr::contains(cond_2), .after = dplyr::last_col()) %>%
-        na.omit() %>% 
-        as.matrix()
-      
-      a <- grep(cond_1, colnames(mat))
-      b <- grep(cond_2, colnames(mat))
-      
-      p_values_vec <- apply(mat, 1, function(x) t.test(x[a], x[b], ...)$p.value)
-      
-      p_values <- p_values_vec %>%
-        as_tibble(rownames = NA) %>%
-        tibble::rownames_to_column(var = "gene_names") %>%
-        dplyr::rename(p_val = value)
-      
-      fold_change <- apply(mat, 1, function(x) mean(x[a]) - mean(x[b])) %>% #metterlo in log2?
-        as_tibble(rownames = NA) %>%
-        tibble::rownames_to_column(var = "gene_names") %>%
-        dplyr::rename(fold_change = value)
-      
-      p_ajusted <- p.adjust(p_values_vec, method = p_adj_method) %>% 
-        as_tibble(rownames = NA) %>%
-        tibble::rownames_to_column(var = "gene_names") %>%
-        dplyr::rename(p_adj = value)
-      
-      stat_data <- fold_change %>% 
-        dplyr::full_join(., p_values, by = "gene_names") %>% 
-        dplyr::full_join(., p_ajusted, by = "gene_names") %>% 
-        dplyr::mutate(significant = dplyr::if_else(abs(fold_change) >= fc & p_adj <= alpha, TRUE, FALSE)) %>% 
-        dplyr::rename(!!paste0(cond_1, "_vs_", cond_2, "_significant") := significant) %>% 
-        dplyr::rename(!!paste0(cond_1, "_vs_", cond_2, "_p_val") := p_val) %>% 
-        dplyr::rename(!!paste0(cond_1, "_vs_", cond_2, "_fold_change") := fold_change) %>% 
-        dplyr::rename(!!paste0(cond_1, "_vs_", cond_2, "_p_adj") := p_adj)
-      
-      return(stat_data)
-    }
 ```
 
 per vedere la tabella risultate per adesso non ho creato una funzione, ma ecco come visualizzarla:
@@ -1310,5 +287,50 @@ visNetwork(
   ) %>%
   visPhysics(stabilization = TRUE) %>%
   visEdges(smooth = FALSE)
+```
+
+# PCA plot static
+
+```{r PCA}
+mat <- imputed_data %>% 
+  dplyr::select(gene_names, label, intensity) %>%
+  tidyr::pivot_wider(id_cols = "gene_names",
+                     names_from = "label",
+                     values_from = "intensity") %>%
+  tibble::column_to_rownames("gene_names") %>%
+  as.matrix()
+      
+## perform PCA
+
+pca <- prcomp(t(mat), center = TRUE, scale = TRUE) 
+      
+## calculate percentage of each PC
+pca_var <- pca$sdev^2
+pca_var_perc <- round(pca_var/sum(pca_var)*100, 1)
+      
+## create a data.frame for the first 3 PC
+pca_table <- data.frame(label = rownames(pca$x),
+                        x = pca$x[, 1],
+                        y = pca$x[, 2],
+                        z = pca$x[, 3]) %>% 
+  dplyr::left_join(expdesign, by = "label") %>% 
+  group_by(condition)
+      
+## generate plot
+
+ggplot(pca_table, aes(x=x, y=y),group=condition)+
+  geom_point(size=3, shape=19, aes(color=condition))+
+  theme_minimal()+
+  geom_hline(yintercept = 0, linetype="longdash")+
+  geom_vline(xintercept = 0, linetype="longdash")+
+  scale_color_manual(values = c("#43BF71FF", "#21908CFF", "#35608DFF"))+
+  theme(plot.title = element_text(hjust = 0.5, size = 18),
+        legend.position = 'right',
+        axis.title.x = element_text(size = 15),
+        axis.title.y = element_text(size = 15),
+        axis.text = element_text(size = 10))+
+  labs(title="PCA", subtitle = "Principal component analysis", x="PC1", y="PC2")+
+  geom_text(aes(label=replicate), size=3, position = "dodge", hjust=1.5)
+
 ```
 
