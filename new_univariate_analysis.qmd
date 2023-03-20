@@ -44,8 +44,6 @@ exp_des <- exp_design (data=raw_data, pattern_interest = "lfq_intensity_bc_")
 # Data pre-processing
 
 ```{r Data preprocessing}
-
-
 data_pre <- pre_process (data=raw_data, pattern_interest =  "lfq_intensity_bc_")
 ```
 
