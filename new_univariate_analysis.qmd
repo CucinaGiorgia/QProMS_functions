@@ -2,9 +2,10 @@
 title: "New Univariate Analysis"
 format: html
 editor: visual
+warning: false
 ---
 
-# Libraries loading and sources
+## Libraries loading and sources
 
 ```{r loading-libreries, echo=FALSE}
 library(data.table)
@@ -27,27 +28,51 @@ library(ComplexHeatmap)
 
 source(file = "C:/Users/MSU/Documents/GC/Analysis/myfun_test.R")
 source(file = "C:/Users/MSU/Documents/GC/Analysis/theme_ggplot_test.R")
+
+source(file = here::here("r6class_app.R"))
+
+
+r6 <- QProMS$new()
+
 ```
 
-# Loading raw data
+## Loading raw data
 
-```{r loading-data}
+```{r loading-data-1}
 raw_data <- loading_data(file_path = here::here("proteinGroups.txt"))
 ```
 
-# Make Experimental Design
+```{r loading-data-2}
+r6$loading_data(
+  input_path = "C:/Users/MSU/Documents/GC/Analysis/QProMS_test_functions/proteinGroups.txt",
+  input_type = "max_quant"
+)
+```
 
-```{r make-expdesig}
+## Make Experimental Design
+
+```{r make-expdesign-1}
 exp_des <- exp_design (data=raw_data, pattern_interest = "lfq_intensity_bc_")
 ```
 
-# Data pre-processing
+```{r make-expdesign-2}
+r6$make_expdesign(
+  start_with = "lfq_intensity_bc_"
+)
+```
 
-```{r Data preprocessing}
+## Data pre-processing
+
+```{r Data preprocessing 1}
 data_pre <- pre_process (data=raw_data, pattern_interest =  "lfq_intensity_bc_")
 ```
 
-# Data wrangling merged table (exp_des+pre_process)
+```{r Data preprocessing 2}
+r6$pg_preprocessing()
+```
+
+
+## Data wrangling merged table (exp_des+pre_process)
 
 ```{r Wrangling/Data filtered}
 data_wrang <- data_wrangling(data=data_pre,
@@ -55,7 +80,19 @@ data_wrang <- data_wrangling(data=data_pre,
                              pep_thr = 2)
 ```
 
-# Filter application
+```{r data-wrangling}
+r6$data_wrangling(
+  valid_val_filter = "alog",
+  valid_val_thr = 0.75,
+  pep_filter = "peptides",
+  pep_thr = 2,
+  rev = TRUE,
+  cont = TRUE,
+  oibs = TRUE
+)
+```
+
+## Filter application
 
 ```{r Data Filtered}
 data_filt <- data_filtered(data = data_wrang,
@@ -63,7 +100,7 @@ data_filt <- data_filtered(data = data_wrang,
                            valid_val_thr = 0.75)
 ```
 
-# Data imputation
+## Data imputation
 
 ```{r Data imputed}
 data_imput <- data_imputed (data= data_filt,
@@ -73,14 +110,22 @@ data_imput <- data_imputed (data= data_filt,
 
 ```
 
+## Color palette
+
 ```{r Palette}
 n_of_color <- max(exp_des %>% dplyr::count(replicate) %>% dplyr::pull(n))
 color_palette <- viridis::viridis(n = n_of_color , direction = -1, end = 0.70, begin = 0.30)
 
 ```
 
+## Quality control
+
 ```{r Protein count by condition}
 barplot_count(data = data_filt)
+```
+
+```{r protein-counts}
+r6$plot_protein_counts() 
 ```
 
 ```{r Protein Coverage}
@@ -88,26 +133,100 @@ barplot_cover(data = data_filt)+
   theme(legend.position = "none")
 ```
 
+```{r valid-values}
+r6$plot_protein_coverage()
+```
+
 ```{r Normalized data distribution}
 boxplot(data=data_filt)
 ```
+
+```{r plot-dis}
+r6$plot_distribution()
+```
+
+## Plots
 
 ```{r Missing data distribution}
 densityplot(data=data_filt)
 ```
 
-```{rPlot Missing data}
+```{r plot-missval2}
+r6$plot_missval_distribution()
+```
+
+```{r Plot Missing data}
 barplot_missval(data=data_filt)
 ```
 
-```{r Missing value distribution}
-den_missval(data=data_filt)
+```{r plot-missval1}
+r6$plot_missing_data()
 ```
 
 ```{r Plot imputation}
 den_imput(data=data_filt)    
 ```
 
+```{r plot-imputation}
+r6$plot_imputation()
+```
+
 ```{r Heatmap}
 htmap(data = data_filt)
+```
+
+```{r plot-corr}
+r6$plot_correlation_interactive()
+```
+
+## PCA
+```{r PCA 1}
+pca <- prcomp(t(mat(data= data_imput)), center = TRUE, scale = TRUE) 
+      
+## create a data.frame for the first 3 PC
+pca_table <- data.frame(label = rownames(pca$x),
+                        x = pca$x[, 1],
+                        y = pca$x[, 2],
+                        z = pca$x[, 3]) %>% 
+  dplyr::left_join(exp_des, by = "label") %>% 
+  group_by(condition)
+ 
+
+pca_plot(data=pca_table)
+
+```
+
+```{r pca}
+r6$plot_pca(view_3d = FALSE)
+```
+
+```{r VOlcano}
+volcano <- function(data){
+  data%>% 
+  ggplot2::ggplot(aes(x=rev_vs_dmso_fold_change, y=-log10(rev_vs_dmso_p_val))) +
+  geom_point()+
+  theme_cuc()+
+  geom_hline(yintercept = 0.5, linetype="longdash")+
+  geom_vline(xintercept = c(-1, 1), linetype="longdash")+
+  scale_fill_manual(dplyr::case_when(rev_vs_dmso_fold_change > 1 & -log10(rev_vs_dmso_p_val) > 0.5 ~ "red",
+                              rev_vs_dmso_fold_change < -1 & -log10(rev_vs_dmso_p_val) > 0.5 ~ "blue",
+                              TRUE ~ "grey"))
+}
+
+volcano(data=r6$stat_table)
+```
+
+
+```{r plot-volcano}
+r6$stat_t_test(
+  data = r6$imputed_data,
+  test = tests,
+  fc = 1,
+  alpha = 0.05
+)
+
+r6$plot_volcano(test = tests, highlights_names = c("VCAN", "STAT3"))
+
+```
+
 ```
