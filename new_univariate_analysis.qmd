@@ -71,7 +71,6 @@ data_pre <- pre_process (data=raw_data, pattern_interest =  "lfq_intensity_bc_")
 r6$pg_preprocessing()
 ```
 
-
 ## Data wrangling merged table (exp_des+pre_process)
 
 ```{r Wrangling/Data filtered}
@@ -180,6 +179,7 @@ r6$plot_correlation_interactive()
 ```
 
 ## PCA
+
 ```{r PCA 1}
 pca <- prcomp(t(mat(data= data_imput)), center = TRUE, scale = TRUE) 
       
@@ -214,8 +214,9 @@ volcano <- function(data){
 }
 
 volcano(data=r6$stat_table)
-```
 
+
+```
 
 ```{r plot-volcano}
 r6$stat_t_test(
@@ -229,4 +230,4 @@ r6$plot_volcano(test = tests, highlights_names = c("VCAN", "STAT3"))
 
 ```
 
-```
+\`\`\`
