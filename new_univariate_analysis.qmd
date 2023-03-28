@@ -25,6 +25,7 @@ library(ggplot2)
 library(vsn)
 library(corrmorant)
 library(ComplexHeatmap)
+library(STRINGdb)
 
 source(file = "C:/Users/MSU/Documents/GC/Analysis/myfun_test.R")
 source(file = "C:/Users/MSU/Documents/GC/Analysis/theme_ggplot_test.R")
@@ -239,14 +240,22 @@ r6$plot_volcano(test = tests, highlights_names = c("VCAN", "STAT3"))
 ```
 
 ```{r Dataset significat}
-sig <- r6$stat_table %>% 
+sig <-r6$stat_table %>% 
   dplyr::filter(., !rev_vs_dmso_significant==FALSE) %>% 
   dplyr::mutate(regulation = dplyr::if_else(rev_vs_dmso_fold_change > 0, "Up", "Down")) %>% 
   dplyr::select(gene_names, rev_vs_dmso_fold_change, rev_vs_dmso_p_val, rev_vs_dmso_p_adj, regulation) %>% 
   dplyr::mutate(gene_names = stringr::str_extract(gene_names, "[^;_]*")) %>% 
-  dplyr::distinct(gene_names, .keep_all = TRUE) %>% 
-  clusterProfiler::bitr(gene_names, fromType="SYMBOL", toType="UNIPROT", OrgDb="org.Hs.eg.db")
+  dplyr::distinct(gene_names, .keep_all = TRUE) %>%
+  dplyr::pull(gene_names) %>% 
+  bitr(fromType="SYMBOL", toType="UNIPROT", OrgDb="org.Hs.eg.db") %>% 
+  as.data.frame() 
 
+  
+  
+
+string_db <- STRINGdb$new()
+Test= string_db$map(sig, "UNIPROT", removeUnmappedRows=TRUE)
+string_db$plot_network(sig) #Prima network brutta
 
 
 
