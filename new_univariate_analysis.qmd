@@ -109,6 +109,10 @@ data_imput <- data_imputed (data= data_filt,
 
 ```
 
+```{r Imputation}
+r6$imputation()
+```
+
 ## Color palette
 
 ```{r Palette}
@@ -200,34 +204,52 @@ pca_plot(data=pca_table)
 r6$plot_pca(view_3d = FALSE)
 ```
 
-```{r VOlcano}
-volcano <- function(data){
-  data%>% 
-  ggplot2::ggplot(aes(x=rev_vs_dmso_fold_change, y=-log10(rev_vs_dmso_p_val))) +
-  geom_point()+
-  theme_cuc()+
-  geom_hline(yintercept = 0.5, linetype="longdash")+
-  geom_vline(xintercept = c(-1, 1), linetype="longdash")+
-  scale_fill_manual(dplyr::case_when(rev_vs_dmso_fold_change > 1 & -log10(rev_vs_dmso_p_val) > 0.5 ~ "red",
-                              rev_vs_dmso_fold_change < -1 & -log10(rev_vs_dmso_p_val) > 0.5 ~ "blue",
-                              TRUE ~ "grey"))
-}
-
-volcano(data=r6$stat_table)
-
-
-```
-
-```{r plot-volcano}
+```{r Statistics t-test}
+r6$define_tests()
+tests <- "rev_vs_dmso"
 r6$stat_t_test(
   data = r6$imputed_data,
   test = tests,
   fc = 1,
   alpha = 0.05
 )
+```
 
-r6$plot_volcano(test = tests, highlights_names = c("VCAN", "STAT3"))
+
+```{r VOlcano}
+data <- r6$stat_table%>% 
+  ggplot2::ggplot(aes(x=rev_vs_dmso_fold_change,
+                      y=-log10(rev_vs_dmso_p_val),
+                      color=dplyr::case_when(rev_vs_dmso_fold_change > 1 & -log10(rev_vs_dmso_p_val) > 0.5 ~ "red",
+                              rev_vs_dmso_fold_change < -1 & -log10(rev_vs_dmso_p_val) > 0.5 ~ "blue",
+                              TRUE ~ "grey"))) +
+  geom_point()+
+  theme_cuc()+
+  geom_hline(yintercept = 0.5, linetype="longdash")+
+  geom_vline(xintercept = c(-1, 1), linetype="longdash")+
+  scale_color_identity()+
+  xlim(-7,NA)+
+  labs(title= "Volcano plot", subtitle= "Rev VS Dmso", x="Fold change", y= "P-value")
+print(data)
 
 ```
 
-\`\`\`
+```{r plot-volcano}
+r6$plot_volcano(test = tests, highlights_names = c("VCAN", "STAT3"))
+```
+
+```{r Dataset significat}
+sig <- r6$stat_table %>% 
+  dplyr::filter(., !rev_vs_dmso_significant==FALSE) %>% 
+  dplyr::mutate(regulation = dplyr::if_else(rev_vs_dmso_fold_change > 0, "Up", "Down")) %>% 
+  dplyr::select(gene_names, rev_vs_dmso_fold_change, rev_vs_dmso_p_val, rev_vs_dmso_p_adj, regulation) %>% 
+  dplyr::mutate(gene_names = stringr::str_extract(gene_names, "[^;_]*")) %>% 
+  dplyr::distinct(gene_names, .keep_all = TRUE) %>% 
+  clusterProfiler::bitr(gene_names, fromType="SYMBOL", toType="UNIPROT", OrgDb="org.Hs.eg.db")
+
+
+
+
+
+```
+
