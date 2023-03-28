@@ -26,6 +26,7 @@ library(vsn)
 library(corrmorant)
 library(ComplexHeatmap)
 library(STRINGdb)
+library(igraph)
 
 source(file = "C:/Users/MSU/Documents/GC/Analysis/myfun_test.R")
 source(file = "C:/Users/MSU/Documents/GC/Analysis/theme_ggplot_test.R")
@@ -257,6 +258,7 @@ string_db <- STRINGdb$new()
 Test= string_db$map(sig, "UNIPROT", removeUnmappedRows=TRUE)
 string_db$plot_network(sig) #Prima network brutta
 
+string_db$get_graph() #human network
 
 
 
