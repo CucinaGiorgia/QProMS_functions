@@ -276,12 +276,11 @@ all_edges<- left_join(all_edges, Test, by=c('to'='STRING_id')) %>%
 
   
 g <- graph_from_data_frame(all_edges, directed = FALSE, vertices = Test$SYMBOL) %>% 
-  delete.vertices(., which(degree(.)==0))
+  delete.vertices(., which(degree(.)==0)) %>% 
+  
 
 set.seed(500) #Serve per vedere ogni volta la stessa forma della network -> Riproducibilita'
-plot(g, vertex.size=10, layout=layout_on_sphere)
-
-
+plot(g, vertex.size=10, layout=layout_on_sphere, remove.loops=TRUE, edge.color="black")
 
 
 
