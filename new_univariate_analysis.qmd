@@ -217,7 +217,6 @@ r6$stat_t_test(
 )
 ```
 
-
 ```{r VOlcano}
 data <- r6$stat_table%>% 
   ggplot2::ggplot(aes(x=rev_vs_dmso_fold_change,
@@ -249,18 +248,43 @@ sig <-r6$stat_table %>%
   dplyr::distinct(gene_names, .keep_all = TRUE) %>%
   dplyr::pull(gene_names) %>% 
   bitr(fromType="SYMBOL", toType="UNIPROT", OrgDb="org.Hs.eg.db") %>% 
-  as.data.frame() 
-
-  
-  
-
-string_db <- STRINGdb$new()
-Test= string_db$map(sig, "UNIPROT", removeUnmappedRows=TRUE)
-string_db$plot_network(sig) #Prima network brutta
-
-string_db$get_graph() #human network
-
-
-
+  #Filtro di nuovo per via dei duplicati di symbol (ad ogni symbol corrispondono piu' uniprot)
+  dplyr::distinct(SYMBOL, .keep_all = TRUE) %>% 
+  as.data.frame()
 ```
 
+
+```{r STRING Network}
+string_db <- STRINGdb$new()
+
+Test <- string_db$map(sig, "UNIPROT", removeUnmappedRows=TRUE) %>% #Non tutti possono essere mappati
+  dplyr::select(SYMBOL, STRING_id) %>% 
+  as.data.frame()
+
+string_db$plot_network(Test) #Prima network brutta
+
+
+all_edges <- string_db$get_interactions(Test$STRING_id)
+
+all_edges<- left_join(all_edges, Test, by=c('from'='STRING_id'))
+all_edges<- left_join(all_edges, Test, by=c('to'='STRING_id')) %>% 
+  dplyr::rename(FROM = SYMBOL.x, TO=SYMBOL.y) %>%
+  dplyr::mutate(Names= paste0(FROM, "_", TO)) %>% 
+  dplyr::distinct(Names, .keep_all = TRUE) %>%
+  dplyr::select(FROM,TO) %>% 
+  as.data.frame()
+
+  
+g <- graph_from_data_frame(all_edges, directed = FALSE, vertices = Test$SYMBOL) %>% 
+  delete.vertices(., which(degree(.)==0))
+
+set.seed(500) #Serve per vedere ogni volta la stessa forma della network -> Riproducibilita'
+plot(g, vertex.size=10, layout=layout_on_sphere)
+
+
+
+
+
+ceb <- cluster_edge_betweenness(g)
+plot(g, ceb)
+```
