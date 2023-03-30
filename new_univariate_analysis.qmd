@@ -289,7 +289,7 @@ deg <- degree(g, mode = "all") #se voglio che al dimensione dei nodi corrisponda
 set.seed(500) #Serve per vedere ogni volta la stessa forma della network -> Riproducibilita'
 plot(g, vertex.size= deg, layout=layout_with_lgl, remove.loops=TRUE, edge.color="black", vertex.label.cex=0.6)
 
-00000# Tentativo con Network
+# Tentativo con Network
 net <- network(all_edges,
         vertex.attr = Test,
         directed = FALSE,
@@ -301,32 +301,23 @@ plot(net, vertex.cex=3)
 
 
 #Tentativo con VisNetwork
-visNetwork(Nodes, Edges) %>%
-  visEdges(color = "grey") %>%
-  visNodes(shape = "circle",
-           color = list(background="#0085AF",
-                        border= "#013848"))%>% 
-  visNodes(size = 40) %>% 
-  visLayout(randomSeed = 500)
-
-# ceb <- cluster_edge_betweenness(g)
-# plot(g, ceb)
+# visNetwork(Nodes, Edges) %>%
+#   visEdges(color = "grey") %>%
+#   visNodes(shape = "circle",
+#            color = list(background="#0085AF",
+#                         border= "#013848"))%>% 
+#   visNodes(size = 40) %>% 
+#   visLayout(randomSeed = 500)
   
 p <- simpleNetwork(Edges,
                    fontSize = 15,
                    linkColour ="#013848",
                    zoom = TRUE)
 p
-
-boh <- renderSimpleNetwork({
-  simpleNetwork(Edges,
-                   fontSize = 15,
-                   linkColour ="#013848",
-                   zoom = TRUE)
-})
+```
 
 
-
+```{r Shiny test}
 library(shiny)
 library(shinySearchbar)
 
