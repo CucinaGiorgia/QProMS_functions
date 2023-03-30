@@ -248,109 +248,112 @@ sig <-r6$stat_table %>%
   dplyr::mutate(regulation = dplyr::if_else(rev_vs_dmso_fold_change > 0, "Up", "Down")) %>% 
   dplyr::select(gene_names, rev_vs_dmso_fold_change, rev_vs_dmso_p_val, rev_vs_dmso_p_adj, regulation) %>% 
   dplyr::mutate(gene_names = stringr::str_extract(gene_names, "[^;_]*")) %>% 
-  dplyr::distinct(gene_names, .keep_all = TRUE) %>%
+  dplyr::distinct(gene_names, .keep_all = TRUE)
+```
+
+```{r STRING Network}
+sig_string <- sig %>% 
   dplyr::pull(gene_names) %>% 
   bitr(fromType="SYMBOL", toType="UNIPROT", OrgDb="org.Hs.eg.db") %>% 
   #Filtro di nuovo per via dei duplicati di symbol (ad ogni symbol corrispondono piu' uniprot)
   dplyr::distinct(SYMBOL, .keep_all = TRUE) %>% 
   as.data.frame()
-```
 
-```{r STRING Network}
 string_db <- STRINGdb$new()
 
-Test <- string_db$map(sig, "UNIPROT", removeUnmappedRows=TRUE) %>% #Non tutti possono essere mappati
+Nodes <- string_db$map(sig_string, "UNIPROT", removeUnmappedRows=TRUE) %>% #Non tutti possono essere mappati
   dplyr::select(SYMBOL, STRING_id) %>% 
   as.data.frame()
 
-string_db$plot_network(Test) #Prima network brutta
+string_db$plot_network(Nodes) #Prima network brutta
 
 
-all_edges <- string_db$get_interactions(Test$STRING_id)
-
-all_edges<- left_join(all_edges, Test, by=c('from'='STRING_id'))
-all_edges<- left_join(all_edges, Test, by=c('to'='STRING_id')) %>% 
-  dplyr::rename(FROM = SYMBOL.x, TO=SYMBOL.y) %>%
-  dplyr::mutate(Names= paste0(FROM, "_", TO)) %>% 
-  dplyr::distinct(Names, .keep_all = TRUE) %>%
-  dplyr::select(FROM,TO) %>% 
+Edges <- string_db$get_interactions(Nodes$STRING_id) %>%
+  dplyr::mutate(Names= paste0(from, "_", to)) %>% 
+  dplyr::distinct(Names, .keep_all = TRUE) %>% 
+  inner_join(., Test, by=c('from'='STRING_id')) %>% 
+  inner_join(., Test, by=c('to'='STRING_id')) %>% 
+  dplyr::rename(FROM = SYMBOL.x, TO=SYMBOL.y) %>% 
+  dplyr::select(FROM,TO, combined_score) %>% 
   as.data.frame()
 
-#Tentativo con iGraph
-g <- graph_from_data_frame(all_edges, directed = FALSE, vertices = Test$SYMBOL) %>% 
-  delete.vertices(., which(degree(.)==0)) 
 
-deg <- degree(g, mode = "all") #se voglio che al dimension edei nodi corrisponda al grado
+
+#Tentativo con iGraph
+g <- graph_from_data_frame(Edges, directed = FALSE, vertices = Test$SYMBOL) %>% 
+  delete.vertices(which(degree(.)==0)) 
+
+deg <- degree(g, mode = "all") #se voglio che al dimensione dei nodi corrisponda al grado
   
 
 set.seed(500) #Serve per vedere ogni volta la stessa forma della network -> Riproducibilita'
 plot(g, vertex.size= deg, layout=layout_with_lgl, remove.loops=TRUE, edge.color="black", vertex.label.cex=0.6)
 
-# Tentativo con Network
+00000# Tentativo con Network
 net <- network(all_edges,
         vertex.attr = Test,
         directed = FALSE,
         ignore.eval=FALSE)
 
 
-plot(net, vertex.cex=3, network.layout.fruchtermanreingold(net))
+plot(net, vertex.cex=3)
 
 
 
 #Tentativo con VisNetwork
-visNetwork(Test, all_edges) %>% 
-  visIgraphLayout() %>% 
-  visNodes(size = 10)
-
+visNetwork(Nodes, Edges) %>%
+  visEdges(color = "grey") %>%
   visNodes(shape = "circle",
            color = list(background="#0085AF",
-                        border= "#013848"),
-           size = 30) %>% 
-  visEdges(color = "grey") %>% 
+                        border= "#013848"))%>% 
+  visNodes(size = 40) %>% 
   visLayout(randomSeed = 500)
 
 # ceb <- cluster_edge_betweenness(g)
 # plot(g, ceb)
   
-p <- simpleNetwork(all_edges,
+p <- simpleNetwork(Edges,
                    fontSize = 15,
                    linkColour ="#013848",
                    zoom = TRUE)
 p
 
 boh <- renderSimpleNetwork({
-  simpleNetwork(all_edges,
+  simpleNetwork(Edges,
                    fontSize = 15,
                    linkColour ="#013848",
                    zoom = TRUE)
 })
 
-forceNetwork(Links = all_edges$FROM, Nodes = Test$SYMBOL, NodeID = "SYMBOL", Group = "group")
 
 
 library(shiny)
 library(shinySearchbar)
 
-server <- function (input,output){
-  output$simple <-renderSimpleNetwork({
-  simpleNetwork(all_edges,
-                fontSize = 15,
-                linkColour ="#013848",
-                zoom = TRUE,
-                opacity = input$opacity)
-})
-}
+
 
 ui <- shinyUI(fluidPage(
   titlePanel("Shiny Test Network"),
   sidebarPanel(
-    sliderInput("opacity", min = 0.1, max = 1, value = 0.5, step = 0.1, label = "Opacity")
+    sliderInput(Edges$combined_score, min = 100, max = 1000, value = 500, step = 25, label = "Combined score")
   ),
   mainPanel(
     tabPanel("Simple Network", simpleNetworkOutput("simple"))
-   ),
-  textInput("text", value = "", label = "Search Proteins")
+   )
   ))
 
+
+server <- function (input,output){
+  output$simple <-renderSimpleNetwork({
+  simpleNetwork(Edges,
+                fontSize = 15,
+                linkColour ="#013848",
+                zoom = TRUE,
+                opacity = input$combined_score)
+})
+}
+
 shinyApp(ui=ui, server = server)
+
+
 ```
