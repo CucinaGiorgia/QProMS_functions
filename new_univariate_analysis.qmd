@@ -27,6 +27,9 @@ library(corrmorant)
 library(ComplexHeatmap)
 library(STRINGdb)
 library(igraph)
+library(network)
+library(qgraph)
+library(networkD3)
 
 source(file = "C:/Users/MSU/Documents/GC/Analysis/myfun_test.R")
 source(file = "C:/Users/MSU/Documents/GC/Analysis/theme_ggplot_test.R")
@@ -253,7 +256,6 @@ sig <-r6$stat_table %>%
   as.data.frame()
 ```
 
-
 ```{r STRING Network}
 string_db <- STRINGdb$new()
 
@@ -274,16 +276,81 @@ all_edges<- left_join(all_edges, Test, by=c('to'='STRING_id')) %>%
   dplyr::select(FROM,TO) %>% 
   as.data.frame()
 
-  
+#Tentativo con iGraph
 g <- graph_from_data_frame(all_edges, directed = FALSE, vertices = Test$SYMBOL) %>% 
-  delete.vertices(., which(degree(.)==0)) %>% 
+  delete.vertices(., which(degree(.)==0)) 
+
+deg <- degree(g, mode = "all") #se voglio che al dimension edei nodi corrisponda al grado
   
 
 set.seed(500) #Serve per vedere ogni volta la stessa forma della network -> Riproducibilita'
-plot(g, vertex.size=10, layout=layout_on_sphere, remove.loops=TRUE, edge.color="black")
+plot(g, vertex.size= deg, layout=layout_with_lgl, remove.loops=TRUE, edge.color="black", vertex.label.cex=0.6)
+
+# Tentativo con Network
+net <- network(all_edges,
+        vertex.attr = Test,
+        directed = FALSE,
+        ignore.eval=FALSE)
+
+
+plot(net, vertex.cex=3, network.layout.fruchtermanreingold(net))
 
 
 
-ceb <- cluster_edge_betweenness(g)
-plot(g, ceb)
+#Tentativo con VisNetwork
+visNetwork(Test, all_edges) %>% 
+  visIgraphLayout() %>% 
+  visNodes(size = 10)
+
+  visNodes(shape = "circle",
+           color = list(background="#0085AF",
+                        border= "#013848"),
+           size = 30) %>% 
+  visEdges(color = "grey") %>% 
+  visLayout(randomSeed = 500)
+
+# ceb <- cluster_edge_betweenness(g)
+# plot(g, ceb)
+  
+p <- simpleNetwork(all_edges,
+                   fontSize = 15,
+                   linkColour ="#013848",
+                   zoom = TRUE)
+p
+
+boh <- renderSimpleNetwork({
+  simpleNetwork(all_edges,
+                   fontSize = 15,
+                   linkColour ="#013848",
+                   zoom = TRUE)
+})
+
+forceNetwork(Links = all_edges$FROM, Nodes = Test$SYMBOL, NodeID = "SYMBOL", Group = "group")
+
+
+library(shiny)
+library(shinySearchbar)
+
+server <- function (input,output){
+  output$simple <-renderSimpleNetwork({
+  simpleNetwork(all_edges,
+                fontSize = 15,
+                linkColour ="#013848",
+                zoom = TRUE,
+                opacity = input$opacity)
+})
+}
+
+ui <- shinyUI(fluidPage(
+  titlePanel("Shiny Test Network"),
+  sidebarPanel(
+    sliderInput("opacity", min = 0.1, max = 1, value = 0.5, step = 0.1, label = "Opacity")
+  ),
+  mainPanel(
+    tabPanel("Simple Network", simpleNetworkOutput("simple"))
+   ),
+  textInput("text", value = "", label = "Search Proteins")
+  ))
+
+shinyApp(ui=ui, server = server)
 ```
