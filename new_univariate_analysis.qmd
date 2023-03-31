@@ -30,6 +30,9 @@ library(igraph)
 library(network)
 library(qgraph)
 library(networkD3)
+library(httr)
+library(jsonlite)
+library(rbioapi)
 
 source(file = "C:/Users/MSU/Documents/GC/Analysis/myfun_test.R")
 source(file = "C:/Users/MSU/Documents/GC/Analysis/theme_ggplot_test.R")
@@ -251,6 +254,10 @@ sig <-r6$stat_table %>%
   dplyr::distinct(gene_names, .keep_all = TRUE)
 ```
 
+```{r Significant Up}
+
+```
+
 ```{r STRING Network}
 sig_string <- sig %>% 
   dplyr::pull(gene_names) %>% 
@@ -271,17 +278,16 @@ string_db$plot_network(Nodes) #Prima network brutta
 Edges <- string_db$get_interactions(Nodes$STRING_id) %>%
   dplyr::mutate(Names= paste0(from, "_", to)) %>% 
   dplyr::distinct(Names, .keep_all = TRUE) %>% 
-  inner_join(., Test, by=c('from'='STRING_id')) %>% 
-  inner_join(., Test, by=c('to'='STRING_id')) %>% 
+  inner_join(., Nodes, by=c('from'='STRING_id')) %>% 
+  inner_join(., Nodes, by=c('to'='STRING_id')) %>% 
   dplyr::rename(FROM = SYMBOL.x, TO=SYMBOL.y) %>% 
   dplyr::select(FROM,TO, combined_score) %>% 
   as.data.frame()
 ```
 
-
 ```{r iGraph}
 #Tentativo con iGraph
-g <- graph_from_data_frame(Edges, directed = FALSE, vertices = Test$SYMBOL) %>% 
+g <- graph_from_data_frame(Edges, directed = FALSE, vertices = Nodes$SYMBOL) %>% 
   delete.vertices(which(degree(.)==0)) 
 
 deg <- degree(g, mode = "all") #se voglio che al dimensione dei nodi corrisponda al grado
@@ -291,11 +297,10 @@ set.seed(500) #Serve per vedere ogni volta la stessa forma della network -> Ripr
 plot(g, vertex.size= deg, layout=layout_with_lgl, remove.loops=TRUE, edge.color="black", vertex.label.cex=0.6)
 ```
 
-
 ```{r Network package}
 # Tentativo con Network
-net <- network(all_edges,
-        vertex.attr = Test,
+net <- network(Edges,
+        vertex.attr = Nodes,
         directed = FALSE,
         ignore.eval=FALSE)
 
@@ -319,7 +324,6 @@ plot(net, vertex.cex=3)
 #                    zoom = TRUE)
 # p
 ```
-
 
 ```{r Shiny test}
 library(shiny)
@@ -352,3 +356,52 @@ shinyApp(ui=ui, server = server)
 
 
 ```
+
+
+```{r}
+#string <- GET("https://version-11-5.string-db.org/api")
+
+sig_string1 <- sig %>% 
+  dplyr::pull(gene_names)
+
+  # bitr(fromType="SYMBOL", toType="UNIPROT", OrgDb="org.Hs.eg.db") %>% 
+  #Filtro di nuovo per via dei duplicati di symbol (ad ogni symbol corrispondono piu' uniprot)
+  # dplyr::distinct(SYMBOL, .keep_all = TRUE)
+
+Nodes_api <- rba_string_map_ids(ids = sig_string1, species = 9606) %>% 
+  dplyr::select(stringId, preferredName, annotation )
+
+Edges_api <- rba_string_interactions_network(ids = Nodes_api %>% pull(stringId), species = 9606) %>% 
+  dplyr::mutate(Names= paste0(preferredName_A, "_", preferredName_B)) %>% 
+  dplyr::distinct(Names, .keep_all = TRUE) %>% 
+  dplyr::rename(FROM = preferredName_A, TO=preferredName_B) %>%
+  dplyr::select(FROM,TO, escore) %>% 
+  dplyr::filter(escore!=0)
+
+
+Nodes_api_df <- Nodes_api %>% 
+  dplyr::select(preferredName) %>% 
+  dplyr::rename(name=preferredName) %>%
+  dplyr::mutate(group=1) %>% 
+  as.data.frame()
+
+Edges_api_df <- Edges_api %>% 
+  dplyr::rename(Source=FROM, Target=TO) %>% 
+
+  as.data.frame()
+
+simpleNetwork(Edges_api_df,
+              fontSize = 15,
+              linkColour ="#013848",
+              zoom = TRUE)
+
+forceNetwork(Links = Edges_api_df, 
+             Nodes = Nodes_api_df,
+             Source="Source", 
+             Target = "Target", 
+             NodeID = "name", 
+             Group ="group")
+
+
+```
+
