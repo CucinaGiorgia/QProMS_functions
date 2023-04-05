@@ -255,7 +255,12 @@ sig <-r6$stat_table %>%
 ```
 
 ```{r Significant Up}
+sig_up <- function(data, expression){
+  data <- data %>% 
+  dplyr::filter(., !regulation == expression)
+}
 
+up <- sig_up_down(data=sig, expression="Down")
 ```
 
 ```{r STRING Network}
@@ -357,7 +362,6 @@ shinyApp(ui=ui, server = server)
 
 ```
 
-
 ```{r}
 #string <- GET("https://version-11-5.string-db.org/api")
 
@@ -368,8 +372,8 @@ sig_string1 <- sig %>%
   #Filtro di nuovo per via dei duplicati di symbol (ad ogni symbol corrispondono piu' uniprot)
   # dplyr::distinct(SYMBOL, .keep_all = TRUE)
 
-Nodes_api <- rba_string_map_ids(ids = sig_string1, species = 9606) %>% 
-  dplyr::select(stringId, preferredName, annotation )
+Nodes_api <- rba_string_map_ids(ids = sig_string1, species = 9606, echo_query = TRUE) %>%
+  dplyr::select(stringId, preferredName, annotation ) 
 
 Edges_api <- rba_string_interactions_network(ids = Nodes_api %>% pull(stringId), species = 9606) %>% 
   dplyr::mutate(Names= paste0(preferredName_A, "_", preferredName_B)) %>% 
@@ -379,29 +383,78 @@ Edges_api <- rba_string_interactions_network(ids = Nodes_api %>% pull(stringId),
   dplyr::filter(escore!=0)
 
 
-Nodes_api_df <- Nodes_api %>% 
-  dplyr::select(preferredName) %>% 
-  dplyr::rename(name=preferredName) %>%
-  dplyr::mutate(group=1) %>% 
-  as.data.frame()
+Nodes_api_df <- Nodes_api %>%
+  dplyr::rename(name=preferredName) %>% 
+  dplyr::left_join(sig, by= c("name"="gene_names")) %>% 
+  dplyr::select(-c(stringId, annotation, rev_vs_dmso_fold_change)) %>% 
+  dplyr::rename(value =rev_vs_dmso_p_adj, size = rev_vs_dmso_p_val, grp = regulation) %>% 
+  dplyr::mutate(value = log10(value)) %>% 
+   dplyr::mutate(size = log10(size)) %>% 
+  dplyr::mutate(grp = as.factor(grp))
+
+
 
 Edges_api_df <- Edges_api %>% 
-  dplyr::rename(Source=FROM, Target=TO) %>% 
+  dplyr::rename(Source=FROM, Target=TO, Value=escore)
 
-  as.data.frame()
-
-simpleNetwork(Edges_api_df,
-              fontSize = 15,
-              linkColour ="#013848",
-              zoom = TRUE)
-
-forceNetwork(Links = Edges_api_df, 
-             Nodes = Nodes_api_df,
-             Source="Source", 
-             Target = "Target", 
-             NodeID = "name", 
-             Group ="group")
+# simpleNetwork(Edges_api_df,
+#               fontSize = 15,
+#               linkColour ="#013848",
+#               zoom = TRUE)
+# 
+# forceNetwork(Links = Edges_api_df, 
+#              Nodes = Nodes_api_df,
+#              Source="Source", 
+#              Target = "Target", 
+#              Value = "Value",
+#              NodeID = "name", 
+#              Group ="group",
+#              Nodesize = "size")
 
 
 ```
 
+```{r echart prova}
+
+
+
+echarts4r::e_chart() %>% 
+  e_graph() %>% 
+  e_graph_nodes(nodes=Nodes_api_df, names = name,  value=value, size=size, category=grp) %>% 
+  e_graph_edges(Edges_api_df, Source, Target, Value) %>%
+  # e_color(c("blue", "red")) %>% 
+  e_tooltip()
+
+
+```
+
+```{r Up}
+up_nodes <- up %>% 
+  dplyr::pull(gene_names) %>% 
+  rba_string_map_ids(species = 9606, echo_query = TRUE) %>% 
+  dplyr::select(stringId, preferredName, annotation ) %>% 
+  dplyr::rename(name=preferredName) %>% 
+  dplyr::left_join(up, by= c("name"="gene_names")) %>% 
+  dplyr::mutate(group= if_else(rev_vs_dmso_fold_change >1, "Red", "Blue"))
+  
+up_edges <- rba_string_interactions_network(ids = up_nodes %>% pull(stringId), species = 9606) %>% 
+  dplyr::mutate(Names= paste0(preferredName_A, "_", preferredName_B)) %>% 
+  dplyr::distinct(Names, .keep_all = TRUE) %>% 
+  dplyr::rename(Source = preferredName_A, Target=preferredName_B, Value=escore) %>%
+  dplyr::select(Source,Target, Value) %>% 
+  dplyr::filter(Value!=0)
+
+up_nodes %>%
+  dplyr::select(-c(stringId, annotation, group, rev_vs_dmso_fold_change)) %>% 
+  dplyr::rename(value =rev_vs_dmso_p_adj, size = rev_vs_dmso_p_val, grp = regulation) %>% 
+  dplyr::mutate(value = log10(value)) %>% 
+   dplyr::mutate(size = log10(size)) %>% 
+  dplyr::mutate(grp = as.factor(grp)) %>% 
+  View()
+
+echarts4r::e_chart() %>% 
+  e_graph() %>% 
+  e_graph_nodes(nodes=up_nodes, names=name,  value= rev_vs_dmso_p_val, size=2) %>% 
+  e_graph_edges(up_edges, Source, Target, Value) %>% 
+  e_tooltip()
+```
