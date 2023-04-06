@@ -442,20 +442,27 @@ up_edges <-up_nodes %>% dplyr::pull(name) %>%
   dplyr::distinct(Names, .keep_all = TRUE) %>% 
   dplyr::rename(Source = preferredName_A, Target=preferredName_B, Value=escore) %>% 
   dplyr::select(Source,Target, Value) %>%
-  dplyr::filter(Value!=0) %>% 
+  dplyr::filter(Value>0.9) %>% #FILTRO SU ESCORE
   dplyr::mutate(Value = Value*10)
 
 # Filter nodes degree 0
-nodes_w_ed <- up_nodes %>% 
+degree_filtered <- up_nodes %>% 
   left_join(up_edges, by=c("name"="Source")) %>% 
   left_join(up_edges, by=c("name"="Target")) %>% 
+  dplyr::mutate(Source = dplyr::if_else(is.na(Source), 0, 1)) %>% 
+  dplyr::mutate(Target = dplyr::if_else(is.na(Target), 0, 1)) %>% 
+  dplyr::mutate(Exists = Source+Target) %>% 
+  dplyr::filter(!Exists=="0") %>% 
+  dplyr::select(name, size, value, grp) %>% 
+  dplyr::distinct(name, .keep_all = TRUE)
 
-echarts4r::e_charts() %>% 
-  e_graph_gl(itemStyle=list(opacity=0.65)) %>% 
-  e_graph_nodes(nodes=up_nodes, names=name,  value= value, size=size, category = grp) %>% 
+echarts4r::e_charts(animation=FALSE) %>% 
+  e_graph(layout ="circular", itemStyle=list(opacity=0.65) ) %>% 
+  e_graph_nodes(nodes=degree_filtered, names=name,  value= value, size=size, category = grp) %>% 
   e_graph_edges(edges=up_edges, source=Source, target=Target, value=Value, size=Value) %>% 
   e_color(color = "red") %>%
   e_title("Network", "Up Regulated") %>%
+  e_labels(degree_filtered$name, font_size=4) %>% 
   e_modularity() %>% 
   e_tooltip()
 ```
