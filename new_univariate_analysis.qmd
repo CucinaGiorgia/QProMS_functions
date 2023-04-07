@@ -252,23 +252,13 @@ r6$plot_volcano(test = tests, highlights_names = c("VCAN", "STAT3"))
 ## Significant Data
 
 ```{r Dataset significat}
-sig <-r6$stat_table %>% 
-  dplyr::filter(., !rev_vs_dmso_significant==FALSE) %>% 
-  dplyr::mutate(regulation = dplyr::if_else(rev_vs_dmso_fold_change > 0, "Up", "Down")) %>% 
-  dplyr::select(gene_names, rev_vs_dmso_fold_change, rev_vs_dmso_p_val, rev_vs_dmso_p_adj, regulation) %>% 
-  dplyr::mutate(gene_names = stringr::str_extract(gene_names, "[^;_]*")) %>% 
-  dplyr::distinct(gene_names, .keep_all = TRUE)
+sig <- significant(data=r6$stat_table)
 ```
 
 ### Only Up-regulated
 
 ```{r Significant Up}
-sig_up <- function(data, expression){
-  data <- data %>% 
-  dplyr::filter(., !regulation == expression)
-}
-
-up <- sig_up(data=sig, expression="Down")
+up_down <- sig_up_down(data=sig, remove="Down")
 ```
 
 ```{r STRING Network}
@@ -310,7 +300,6 @@ set.seed(500) #Serve per vedere ogni volta la stessa forma della network -> Ripr
 plot(g, vertex.size= deg, layout=layout_with_lgl, remove.loops=TRUE, edge.color="black", vertex.label.cex=0.6)
 ```
 
-
 ```{r Shiny test}
 library(shiny)
 library(shinySearchbar)
@@ -344,40 +333,10 @@ shinyApp(ui=ui, server = server)
 ```
 
 ```{r}
-#string <- GET("https://version-11-5.string-db.org/api")
+nodes <- nodes(data=up_down)
 
-sig_string1 <- sig %>% 
-  dplyr::pull(gene_names)
-
-  # bitr(fromType="SYMBOL", toType="UNIPROT", OrgDb="org.Hs.eg.db") %>% 
-  #Filtro di nuovo per via dei duplicati di symbol (ad ogni symbol corrispondono piu' uniprot)
-  # dplyr::distinct(SYMBOL, .keep_all = TRUE)
-
-Nodes_api <- rba_string_map_ids(ids = sig_string1, species = 9606, echo_query = TRUE) %>%
-  dplyr::select(stringId, preferredName, annotation ) 
-
-Edges_api <- rba_string_interactions_network(ids = Nodes_api %>% pull(stringId), species = 9606) %>% 
-  dplyr::mutate(Names= paste0(preferredName_A, "_", preferredName_B)) %>% 
-  dplyr::distinct(Names, .keep_all = TRUE) %>% 
-  dplyr::rename(FROM = preferredName_A, TO=preferredName_B) %>%
-  dplyr::select(FROM,TO, escore) %>% 
-  dplyr::filter(escore!=0) %>% 
-  dplyr::mutate(escore = escore*10)
-
-
-Nodes_api_df <- Nodes_api %>%
-  dplyr::rename(name=preferredName) %>% 
-  dplyr::left_join(sig, by= c("name"="gene_names")) %>% 
-  dplyr::select(-c(stringId, annotation, rev_vs_dmso_fold_change)) %>% 
-  dplyr::rename(value =rev_vs_dmso_p_adj, size = rev_vs_dmso_p_val, grp = regulation) %>% 
-  dplyr::mutate(value = log10(value)) %>% 
-  dplyr::mutate(size = log10(size)^2) %>% 
-  dplyr::mutate(grp = as.factor(grp))
-
-Edges_api_df <- Edges_api %>% 
-  dplyr::rename(Source=FROM, Target=TO, Value=escore)
+edges <- edges(data= nodes)
 ```
-
 
 ```{r Network D3}
 
@@ -400,64 +359,45 @@ forceNetwork(Links = Edges_api_df,
 ```
 
 ```{r echart prova}
-set.seed(123)
-echarts4r::e_charts() %>% 
-  e_graph(roam=TRUE, itemStyle=list(opacity=0.65),layoutAnimation=FALSE ) %>% 
-  e_graph_nodes(nodes=Nodes_api_df, names = name,  value=value, size=size, category=grp) %>% 
-  e_graph_edges(edges=Edges_api_df, source=Source, target=Target, value=Value, size = Value) %>%
-  e_color(c("blue", "red")) %>% 
-  e_title("Network", "Up & Down Regulated") %>%
-  # e_toolbox_feature(feature = "dataZoom") %>% 
-  e_tooltip()
+plot_net <- function(datanode, dataedge, animation=FALSE, layout="force"){
+  p <- echarts4r::e_charts(animation=FALSE) %>% 
+  echarts4r::e_graph(roam=TRUE, 
+          force= list( initLayout = layout, 
+          repulsion=100,
+          edgeLength=30,
+          layoutAnimation=animation),
+          itemStyle=list(opacity=0.65),
+          lineStyle=list(curveness=0.2), 
+             emphasis=list(focus="adjacency", 
+                           lineStyle=list(width=10))) %>% 
+  echarts4r::e_graph_nodes(nodes=datanode, names = name,  value=value, size=size, category=grp) %>% 
+  echarts4r::e_graph_edges(edges=dataedge, source=Source, target=Target, value=Value, size = Value) %>%
+  echarts4r::e_color(c("blue", "red")) %>% 
+  echarts4r:: e_title("Network", "Up & Down Regulated") %>%
+  echarts4r::e_tooltip()
+  
+  return(p)
+}
 
-
-
-
-echarts4r::e_charts() %>% 
-  e_graph_gl(itemStyle=list(opacity=0.65)) %>% 
-  e_graph_nodes(nodes=Nodes_api_df, names = name,  value=value, size=size, category=grp) %>% 
-  e_graph_edges(edges=Edges_api_df, source=Source, target=Target, value=Value, size=Value) %>%
-  e_color(c("blue", "red")) %>%
-  e_title("Network", "Up & Down Regulated") %>%
-  # e_modularity() %>% 
-  e_tooltip()
+plot_net(datanode=nodes, dataedge=edges )
 
 ```
 
-```{r Up}
-up_nodes <- up %>% dplyr::pull(gene_names) %>% 
-   rba_string_map_ids(species = 9606, echo_query = TRUE) %>%
-  dplyr::select(stringId, preferredName, annotation ) %>% 
-  dplyr::rename(name=preferredName) %>%
-  dplyr::left_join(sig, by= c("name"="gene_names")) %>% 
-  dplyr::select(-c(stringId, annotation, rev_vs_dmso_fold_change)) %>% 
-  dplyr::rename(value =rev_vs_dmso_p_adj, size = rev_vs_dmso_p_val, grp = regulation) %>%
-  dplyr::mutate(value = log10(value)) %>% 
-  dplyr::mutate(size = log10(size)*10) %>% 
-  dplyr::mutate(grp = as.factor(grp))
-  
-up_edges <-up_nodes %>% dplyr::pull(name) %>%
-  rba_string_interactions_network(species = 9606) %>%  
-  dplyr::mutate(Names= paste0(preferredName_A, "_", preferredName_B)) %>% 
-  dplyr::distinct(Names, .keep_all = TRUE) %>% 
-  dplyr::rename(Source = preferredName_A, Target=preferredName_B, Value=escore) %>% 
-  dplyr::select(Source,Target, Value) %>%
-  dplyr::filter(Value>0.9) %>% #FILTRO SU ESCORE
-  dplyr::mutate(Value = Value*10)
-
+```{r Up} 
 # Filter nodes degree 0
-degree_filtered <- up_nodes %>% 
-  left_join(up_edges, by=c("name"="Source")) %>% 
-  left_join(up_edges, by=c("name"="Target")) %>% 
-  dplyr::mutate(Source = dplyr::if_else(is.na(Source), 0, 1)) %>% 
-  dplyr::mutate(Target = dplyr::if_else(is.na(Target), 0, 1)) %>% 
-  dplyr::mutate(Exists = Source+Target) %>% 
-  dplyr::filter(!Exists=="0") %>% 
-  dplyr::select(name, size, value, grp) %>% 
-  dplyr::distinct(name, .keep_all = TRUE)
+degree_filtered <- filter_nodes (datanodes =nodes, data_edges = edges)
 
 echarts4r::e_charts(animation=FALSE) %>% 
-  e_graph(layout ="circular", itemStyle=list(opacity=0.65) ) %>% 
+  e_graph(roam=TRUE, 
+          force= list( initLayout = "force", 
+          repulsion=200,
+          edgeLength=2,
+          layoutAnimation=FALSE),
+             itemStyle=list(opacity=0.65, repulsion=500), 
+             lineStyle=list(curveness=0.2, edgeLength=2), 
+             emphasis=list(focus="adjacency", 
+                           lineStyle=list(width=10)),
+          labelLayout= list(hideOverlap=TRUE)) %>% 
   e_graph_nodes(nodes=degree_filtered, names=name,  value= value, size=size, category = grp) %>% 
   e_graph_edges(edges=up_edges, source=Source, target=Target, value=Value, size=Value) %>% 
   e_color(color = "red") %>%
@@ -465,36 +405,5 @@ echarts4r::e_charts(animation=FALSE) %>%
   e_labels(degree_filtered$name, font_size=4) %>% 
   e_modularity() %>% 
   e_tooltip()
-```
-
-```{r Shiny test echarts4r}
-library(shiny)
-library(shinySearchbar)
-
-
-
-ui <- shinyUI(fluidPage(
-  titlePanel("Shiny Test Network"),
-  sidebarPanel(
-    sliderInput(Edges$combined_score, min = 100, max = 1000, value = 500, step = 25, label = "Combined score")
-  ),
-  mainPanel(
-    tabPanel("Simple Network", simpleNetworkOutput("simple"))
-   )
-  ))
-
-
-server <- function (input,output){
-  output$simple <-renderSimpleNetwork({
-  simpleNetwork(Edges,
-                fontSize = 15,
-                linkColour ="#013848",
-                zoom = TRUE,
-                opacity = input$combined_score)
-})
-}
-
-shinyApp(ui=ui, server = server)
 
 ```
-
