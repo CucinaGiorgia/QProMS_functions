@@ -257,8 +257,97 @@ sig <- significant(data=r6$stat_table)
 
 ### Only Up-regulated
 
-```{r Significant Up}
+```{r Filter Significant Up}
 up_down <- sig_up_down(data=sig, remove="Down")
+```
+
+```{r Create Nodes & Edges}
+nodes <- nodes(data=up_down)
+
+edges <- edges(data= nodes, score=0.4)
+```
+
+
+```{r Filter Nodes Degree 0}
+nodes <- filter_nodes (datanodes =nodes, data_edges = edges)
+```
+
+```{r echart prova}
+
+plot_net(datanode=nodes, dataedge=edges )
+
+```
+
+```{r Up}
+
+echarts4r::e_charts(animation=FALSE) %>% 
+  e_graph(roam=TRUE, 
+          force= list( initLayout = "force", 
+          repulsion=200,
+          edgeLength=2,
+          layoutAnimation=FALSE),
+             itemStyle=list(opacity=0.65, repulsion=500), 
+             lineStyle=list(curveness=0.2, edgeLength=2), 
+             emphasis=list(focus="adjacency", 
+                           lineStyle=list(width=10)),
+          labelLayout= list(hideOverlap=TRUE)) %>% 
+  e_graph_nodes(nodes=degree_filtered, names=name,  value= value, size=size, category = grp) %>% 
+  e_graph_edges(edges=up_edges, source=Source, target=Target, value=Value, size=Value) %>% 
+  e_color(color = "red") %>%
+  e_title("Network", "Up Regulated") %>%
+  e_labels(degree_filtered$name, font_size=4) %>% 
+  e_modularity() %>% 
+  e_tooltip()
+
+```
+
+
+```{r Reactome}
+library(purrr)
+
+rba_reactome_interactors_static_p <- possibly(rba_reactome_interactors_static)
+
+prova <- nodes %>% 
+  pull(name) %>% 
+  bitr(fromType="SYMBOL", toType="UNIPROT", OrgDb="org.Hs.eg.db") %>%
+   dplyr::distinct(SYMBOL, .keep_all = TRUE) %>% 
+  pull(UNIPROT) %>% 
+  map(.f = rba_reactome_interactors_static_p) 
+ 
+
+boh <- as_tibble(do.call(rbind, prova)) %>% 
+ dplyr::mutate(Source=test[[1]]$entities[[1]]$acc) %>% 
+  dplyr::mutate(Count=test[[1]]$entities[[1]]$count) %>% 
+  dplyr::mutate(Target1=test[[1]]$entities[[1]]$interactors[[1]]$acc) %>% 
+  dplyr::mutate(Score1=test[[1]]$entities[[1]]$interactors[[1]]$score) 
+
+
+
+test <- prova[2]
+
+test[[1]]$entities[[1]]$acc #Source
+test[[1]]$entities[[1]]$count #How many interactors
+test[[1]]$entities[[1]]$interactors[[1]]$acc #Target
+test[[1]]$entities[[1]]$interactors[[1]]$score #Score
+
+
+
+```
+
+
+
+
+
+```{r iGraph}
+#Tentativo con iGraph
+g <- graph_from_data_frame(Edges, directed = FALSE, vertices = Nodes$SYMBOL) %>% 
+  delete.vertices(which(degree(.)==0)) 
+
+deg <- degree(g, mode = "all") #se voglio che al dimensione dei nodi corrisponda al grado
+  
+
+set.seed(500) #Serve per vedere ogni volta la stessa forma della network -> Riproducibilita'
+plot(g, vertex.size= deg, layout=layout_with_lgl, remove.loops=TRUE, edge.color="black", vertex.label.cex=0.6)
 ```
 
 ```{r STRING Network}
@@ -286,18 +375,6 @@ Edges <- string_db$get_interactions(Nodes$STRING_id) %>%
   dplyr::rename(FROM = SYMBOL.x, TO=SYMBOL.y) %>% 
   dplyr::select(FROM,TO, combined_score) %>% 
   as.data.frame()
-```
-
-```{r iGraph}
-#Tentativo con iGraph
-g <- graph_from_data_frame(Edges, directed = FALSE, vertices = Nodes$SYMBOL) %>% 
-  delete.vertices(which(degree(.)==0)) 
-
-deg <- degree(g, mode = "all") #se voglio che al dimensione dei nodi corrisponda al grado
-  
-
-set.seed(500) #Serve per vedere ogni volta la stessa forma della network -> Riproducibilita'
-plot(g, vertex.size= deg, layout=layout_with_lgl, remove.loops=TRUE, edge.color="black", vertex.label.cex=0.6)
 ```
 
 ```{r Shiny test}
@@ -332,11 +409,6 @@ shinyApp(ui=ui, server = server)
 
 ```
 
-```{r}
-nodes <- nodes(data=up_down)
-
-edges <- edges(data= nodes)
-```
 
 ```{r Network D3}
 
@@ -358,52 +430,4 @@ forceNetwork(Links = Edges_api_df,
 
 ```
 
-```{r echart prova}
-plot_net <- function(datanode, dataedge, animation=FALSE, layout="force"){
-  p <- echarts4r::e_charts(animation=FALSE) %>% 
-  echarts4r::e_graph(roam=TRUE, 
-          force= list( initLayout = layout, 
-          repulsion=100,
-          edgeLength=30,
-          layoutAnimation=animation),
-          itemStyle=list(opacity=0.65),
-          lineStyle=list(curveness=0.2), 
-             emphasis=list(focus="adjacency", 
-                           lineStyle=list(width=10))) %>% 
-  echarts4r::e_graph_nodes(nodes=datanode, names = name,  value=value, size=size, category=grp) %>% 
-  echarts4r::e_graph_edges(edges=dataedge, source=Source, target=Target, value=Value, size = Value) %>%
-  echarts4r::e_color(c("blue", "red")) %>% 
-  echarts4r:: e_title("Network", "Up & Down Regulated") %>%
-  echarts4r::e_tooltip()
-  
-  return(p)
-}
 
-plot_net(datanode=nodes, dataedge=edges )
-
-```
-
-```{r Up} 
-# Filter nodes degree 0
-degree_filtered <- filter_nodes (datanodes =nodes, data_edges = edges)
-
-echarts4r::e_charts(animation=FALSE) %>% 
-  e_graph(roam=TRUE, 
-          force= list( initLayout = "force", 
-          repulsion=200,
-          edgeLength=2,
-          layoutAnimation=FALSE),
-             itemStyle=list(opacity=0.65, repulsion=500), 
-             lineStyle=list(curveness=0.2, edgeLength=2), 
-             emphasis=list(focus="adjacency", 
-                           lineStyle=list(width=10)),
-          labelLayout= list(hideOverlap=TRUE)) %>% 
-  e_graph_nodes(nodes=degree_filtered, names=name,  value= value, size=size, category = grp) %>% 
-  e_graph_edges(edges=up_edges, source=Source, target=Target, value=Value, size=Value) %>% 
-  e_color(color = "red") %>%
-  e_title("Network", "Up Regulated") %>%
-  e_labels(degree_filtered$name, font_size=4) %>% 
-  e_modularity() %>% 
-  e_tooltip()
-
-```
