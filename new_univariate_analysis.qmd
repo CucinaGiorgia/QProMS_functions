@@ -216,7 +216,7 @@ r6$plot_pca(view_3d = FALSE)
 
 ```{r Statistics t-test}
 r6$define_tests()
-tests <- "rev_vs_dmso"
+tests <- c("rev_vs_dmso", "nw_vs_dmso")
 r6$stat_t_test(
   data = r6$imputed_data,
   test = tests,
@@ -252,7 +252,7 @@ r6$plot_volcano(test = tests, highlights_names = c("VCAN", "STAT3"))
 ## Significant Data
 
 ```{r Dataset significat}
-sig <- significant(data=r6$stat_table)
+sig <- significant(data=r6$stat_table, test = "rev_vs_dmso")
 ```
 
 ### Only Up-regulated
@@ -274,7 +274,7 @@ nodes <- filter_nodes (datanodes =nodes, data_edges = edges)
 
 ```{r echart prova}
 
-plot_net(datanode=nodes, dataedge=edges )
+plot_net(datanode=nodes, dataedge=edges)
 
 ```
 
@@ -282,7 +282,7 @@ plot_net(datanode=nodes, dataedge=edges )
 
 echarts4r::e_charts(animation=FALSE) %>% 
   e_graph(roam=TRUE, 
-          force= list( initLayout = "force", 
+          force= list( initLayout = "circular", 
           repulsion=200,
           edgeLength=2,
           layoutAnimation=FALSE),
@@ -303,52 +303,38 @@ echarts4r::e_charts(animation=FALSE) %>%
 
 
 ```{r Reactome}
-library(purrr)
-
-rba_reactome_interactors_static_p <- possibly(rba_reactome_interactors_static)
-
 prova <- nodes %>% 
   pull(name) %>% 
   bitr(fromType="SYMBOL", toType="UNIPROT", OrgDb="org.Hs.eg.db") %>%
-   dplyr::distinct(SYMBOL, .keep_all = TRUE) %>% 
-  pull(UNIPROT) %>% 
-  map(.f = rba_reactome_interactors_static_p) 
- 
-
-boh <- as_tibble(do.call(rbind, prova)) %>% 
- dplyr::mutate(Source=test[[1]]$entities[[1]]$acc) %>% 
-  dplyr::mutate(Count=test[[1]]$entities[[1]]$count) %>% 
-  dplyr::mutate(Target1=test[[1]]$entities[[1]]$interactors[[1]]$acc) %>% 
-  dplyr::mutate(Score1=test[[1]]$entities[[1]]$interactors[[1]]$score) 
+   dplyr::distinct(SYMBOL, .keep_all = TRUE)
 
 
+rba_list <- rba_reactome_interactors_static(proteins=prova$UNIPROT, endpoint = "details")
 
-test <- prova[2]
+#Create empty DataFrame
+df <- data.frame(Source_Number = numeric(), Source = numeric(), Target_Number = numeric(), Target = numeric(), Score = numeric())
 
-test[[1]]$entities[[1]]$acc #Source
-test[[1]]$entities[[1]]$count #How many interactors
-test[[1]]$entities[[1]]$interactors[[1]]$acc #Target
-test[[1]]$entities[[1]]$interactors[[1]]$score #Score
+# Fill in the Data Frame                  
+for (i in 1:length(rba_list[[2]])) { # Iterate over the entries
+  acc_val <- rba_list[["entities"]][[i]][["acc"]] # Extract entry name
+  count_val <- rba_list[["entities"]][[i]][["count"]] # Extract count of interactors
+  if (count_val > 0) { # Consider only proteins with at least 1 interactor
+    for (j in 1:count_val) { # Iterate over the interactors
+      acc_interactor <- rba_list[["entities"]][[i]][["interactors"]][[j]][["acc"]] # Extract interactor name
+      score_interactor <- rba_list[["entities"]][[i]][["interactors"]][[j]][["score"]] # Extract interactor score
+      df <- rbind(df, data.frame (Source_Number = i,
+                                  Source = acc_val,
+                                  Target_Number = j,
+                                  Target = acc_interactor,
+                                  Score = score_interactor)) # Add row to df with values
+    }}
+}
 
-
+react <- print(df)
 
 ```
 
 
-
-
-
-```{r iGraph}
-#Tentativo con iGraph
-g <- graph_from_data_frame(Edges, directed = FALSE, vertices = Nodes$SYMBOL) %>% 
-  delete.vertices(which(degree(.)==0)) 
-
-deg <- degree(g, mode = "all") #se voglio che al dimensione dei nodi corrisponda al grado
-  
-
-set.seed(500) #Serve per vedere ogni volta la stessa forma della network -> Riproducibilita'
-plot(g, vertex.size= deg, layout=layout_with_lgl, remove.loops=TRUE, edge.color="black", vertex.label.cex=0.6)
-```
 
 ```{r STRING Network}
 sig_string <- sig %>% 
@@ -377,37 +363,7 @@ Edges <- string_db$get_interactions(Nodes$STRING_id) %>%
   as.data.frame()
 ```
 
-```{r Shiny test}
-library(shiny)
-library(shinySearchbar)
 
-
-
-ui <- shinyUI(fluidPage(
-  titlePanel("Shiny Test Network"),
-  sidebarPanel(
-    sliderInput(Edges$combined_score, min = 100, max = 1000, value = 500, step = 25, label = "Combined score")
-  ),
-  mainPanel(
-    tabPanel("Simple Network", simpleNetworkOutput("simple"))
-   )
-  ))
-
-
-server <- function (input,output){
-  output$simple <-renderSimpleNetwork({
-  simpleNetwork(Edges,
-                fontSize = 15,
-                linkColour ="#013848",
-                zoom = TRUE,
-                opacity = input$combined_score)
-})
-}
-
-shinyApp(ui=ui, server = server)
-
-
-```
 
 
 ```{r Network D3}
@@ -430,4 +386,16 @@ forceNetwork(Links = Edges_api_df,
 
 ```
 
+
+```{r}
+plot_all (
+  data = r6$stat_table,
+  test = "nw_vs_dmso",
+  remove = "Up",
+  score = 0.7,
+  animation = FALSE,
+  layout = "circular",
+  no_edge = TRUE
+)
+```
 
