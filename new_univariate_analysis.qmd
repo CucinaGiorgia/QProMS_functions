@@ -282,7 +282,7 @@ plot_net(datanode=nodes, dataedge=edges)
 
 echarts4r::e_charts(animation=FALSE) %>% 
   e_graph(roam=TRUE, 
-          force= list( initLayout = "circular", 
+          force= list( initLayout = "Circular", 
           repulsion=200,
           edgeLength=2,
           layoutAnimation=FALSE),
@@ -306,7 +306,8 @@ echarts4r::e_charts(animation=FALSE) %>%
 prova <- nodes %>% 
   pull(name) %>% 
   bitr(fromType="SYMBOL", toType="UNIPROT", OrgDb="org.Hs.eg.db") %>%
-   dplyr::distinct(SYMBOL, .keep_all = TRUE)
+   dplyr::distinct(SYMBOL, .keep_all = TRUE) %>% 
+  left_join(sig, by=c("SYMBOL"="gene_names"))
 
 
 rba_list <- rba_reactome_interactors_static(proteins=prova$UNIPROT, endpoint = "details")
@@ -330,40 +331,15 @@ for (i in 1:length(rba_list[[2]])) { # Iterate over the entries
     }}
 }
 
-react <- print(df)
+react <- print(df)%>% 
+  dplyr::select(Source, Target, Score)
+
+edges <- react %>% 
+  
+
+nodes
 
 ```
-
-
-
-```{r STRING Network}
-sig_string <- sig %>% 
-  dplyr::pull(gene_names) %>% 
-  bitr(fromType="SYMBOL", toType="UNIPROT", OrgDb="org.Hs.eg.db") %>% 
-  #Filtro di nuovo per via dei duplicati di symbol (ad ogni symbol corrispondono piu' uniprot)
-  dplyr::distinct(SYMBOL, .keep_all = TRUE) %>% 
-  as.data.frame()
-
-string_db <- STRINGdb$new()
-
-Nodes <- string_db$map(sig_string, "UNIPROT", removeUnmappedRows=TRUE) %>% #Non tutti possono essere mappati
-  dplyr::select(SYMBOL, STRING_id) %>% 
-  as.data.frame()
-
-string_db$plot_network(Nodes) #Prima network brutta
-
-
-Edges <- string_db$get_interactions(Nodes$STRING_id) %>%
-  dplyr::mutate(Names= paste0(from, "_", to)) %>% 
-  dplyr::distinct(Names, .keep_all = TRUE) %>% 
-  inner_join(., Nodes, by=c('from'='STRING_id')) %>% 
-  inner_join(., Nodes, by=c('to'='STRING_id')) %>% 
-  dplyr::rename(FROM = SYMBOL.x, TO=SYMBOL.y) %>% 
-  dplyr::select(FROM,TO, combined_score) %>% 
-  as.data.frame()
-```
-
-
 
 
 ```{r Network D3}
@@ -391,8 +367,8 @@ forceNetwork(Links = Edges_api_df,
 plot_all (
   data = r6$stat_table,
   test = "nw_vs_dmso",
-  remove = "Up",
-  score = 0.7,
+  remove = "Down",
+  score = 0.4,
   animation = FALSE,
   layout = "circular",
   no_edge = TRUE
