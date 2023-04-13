@@ -242,7 +242,6 @@ data <- r6$stat_table%>%
   xlim(-7,NA)+
   labs(title= "Volcano plot", subtitle= "Rev VS Dmso", x="Fold change", y= "P-value")
 print(data)
-
 ```
 
 ```{r plot-volcano}
@@ -258,8 +257,11 @@ sig <- significant(data=r6$stat_table, test = "rev_vs_dmso")
 ### Only Up-regulated
 
 ```{r Filter Significant Up}
-up_down <- sig_up_down(data=sig, remove="Down")
+up_down <- sig_up_down(data=sig, remove="")
 ```
+
+# STRINGdb
+### Nodes & Edges
 
 ```{r Create Nodes & Edges}
 nodes <- nodes(data=up_down)
@@ -267,53 +269,32 @@ nodes <- nodes(data=up_down)
 edges <- edges(data= nodes, score=0.4)
 ```
 
+### Filter Nodes 
 
 ```{r Filter Nodes Degree 0}
 nodes <- filter_nodes (datanodes =nodes, data_edges = edges)
 ```
 
-```{r echart prova}
+### Plot Network
 
+```{r echart Network}
 plot_net(datanode=nodes, dataedge=edges)
-
 ```
 
-```{r Up}
-
-echarts4r::e_charts(animation=FALSE) %>% 
-  e_graph(roam=TRUE, 
-          force= list( initLayout = "Circular", 
-          repulsion=200,
-          edgeLength=2,
-          layoutAnimation=FALSE),
-             itemStyle=list(opacity=0.65, repulsion=500), 
-             lineStyle=list(curveness=0.2, edgeLength=2), 
-             emphasis=list(focus="adjacency", 
-                           lineStyle=list(width=10)),
-          labelLayout= list(hideOverlap=TRUE)) %>% 
-  e_graph_nodes(nodes=degree_filtered, names=name,  value= value, size=size, category = grp) %>% 
-  e_graph_edges(edges=up_edges, source=Source, target=Target, value=Value, size=Value) %>% 
-  e_color(color = "red") %>%
-  e_title("Network", "Up Regulated") %>%
-  e_labels(degree_filtered$name, font_size=4) %>% 
-  e_modularity() %>% 
-  e_tooltip()
-
-```
-
+# INTACTdb
 
 ```{r Reactome}
 prova <- nodes %>% 
   pull(name) %>% 
   bitr(fromType="SYMBOL", toType="UNIPROT", OrgDb="org.Hs.eg.db") %>%
    dplyr::distinct(SYMBOL, .keep_all = TRUE) %>% 
-  left_join(sig, by=c("SYMBOL"="gene_names"))
+  left_join(sig, by=c("SYMBOL"="gene_names")) 
 
 
 rba_list <- rba_reactome_interactors_static(proteins=prova$UNIPROT, endpoint = "details")
 
 #Create empty DataFrame
-df <- data.frame(Source_Number = numeric(), Source = numeric(), Target_Number = numeric(), Target = numeric(), Score = numeric())
+df <- data.frame(Source_Number = numeric(), Source = numeric(), Target_Number = numeric(), Target = numeric(), Evidences=numeric(), Score = numeric())
 
 # Fill in the Data Frame                  
 for (i in 1:length(rba_list[[2]])) { # Iterate over the entries
@@ -323,24 +304,118 @@ for (i in 1:length(rba_list[[2]])) { # Iterate over the entries
     for (j in 1:count_val) { # Iterate over the interactors
       acc_interactor <- rba_list[["entities"]][[i]][["interactors"]][[j]][["acc"]] # Extract interactor name
       score_interactor <- rba_list[["entities"]][[i]][["interactors"]][[j]][["score"]] # Extract interactor score
-      df <- rbind(df, data.frame (Source_Number = i,
+      evidences_interactor <- rba_list[["entities"]][[i]][["interactors"]][[j]][["evidences"]]
+      if(evidences_interactor >3){
+        df<- rbind(df, data.frame(Source_Number = i,
                                   Source = acc_val,
                                   Target_Number = j,
                                   Target = acc_interactor,
-                                  Score = score_interactor)) # Add row to df with values
-    }}
+                                  Evidences = evidences_interactor,
+                                  Score = score_interactor))
+      } else {
+        df <- rbind (df, data.frame(Source_Number=i,
+                                    Source = acc_val,
+                                    Target_Number = "NULL",
+                                    Target = "NULL",
+                                    Evidences="NULL",
+                                    Score = "NULL"))
+      }}} else {
+        df<- rbind (df, data.frame(Source_Number=i,
+                                    Source = acc_val,
+                                    Target_Number = "NULL",
+                                    Target = "NULL",
+                                    Evidences="NULL",
+                                    Score = "NULL"))
+      }
+}  
+print(df)
+
+unique_df <- df
+
+count_df <- unique(df) %>%
+  group_by (Source) %>%
+  count()
+
+for (i in 1:nrow(count_df)){
+  if(count_df[["n"]][i]>1){
+    unique_df <- unique_df %>%
+      filter(!(Source==count_df[["Source"]][i] & Score=="NULL"))
+  }
 }
 
-react <- print(df)%>% 
+print(unique_df)
+
+Source <- unique_df %>% 
+  dplyr::select(Source, Target, Score) %>% 
+  dplyr::pull(Source) %>%
+  bitr(fromType="UNIPROT", toType="SYMBOL", OrgDb="org.Hs.eg.db") %>% 
+  dplyr::rename("Source"="SYMBOL") %>% 
+  dplyr::left_join(unique_df, by= c("UNIPROT"="Source")) %>% 
   dplyr::select(Source, Target, Score)
 
-edges <- react %>% 
+edges1 <- unique_df %>% 
+  dplyr::pull(Target) %>%
+  bitr(fromType="UNIPROT", toType="SYMBOL", OrgDb="org.Hs.eg.db") %>% 
+  dplyr::rename("Target"="SYMBOL") %>%
+  dplyr::left_join(Source, by= c("UNIPROT"="Target")) %>% 
+  dplyr::rename("Value"="Score") %>%
+  dplyr::mutate(loop=if_else(Source==Target, 0, 1)) %>% 
+  dplyr::filter(loop!=0) %>% 
+  dplyr::select(Source, Target, Value) %>% 
+  dplyr::mutate(column=0)
   
 
-nodes
 
+nodes1<- prova %>% 
+  dplyr::select(!UNIPROT) %>% 
+  dplyr::rename(name=SYMBOL, value =p_adj, size = p_val, grp = regulation) %>% 
+    dplyr::mutate(value = -log10(value)) %>% 
+    dplyr::mutate(size = -log10(size)*5) %>% 
+    dplyr::mutate(grp = as.factor(grp)) %>% 
+  dplyr::mutate(column=0)
+
+
+
+plot_net(datanode=nodes, dataedge=edges)
+
+nodes_true <- edges1 %>% 
+  dplyr::left_join(nodes1, by = "column") %>%
+  dplyr::mutate(node1=if_else(Target==name, 0, 1))  %>% 
+  dplyr::filter(node1=="0") %>% 
+  dplyr::select(Source, Target, Value) %>% 
+  distinct(Value, .keep_all = TRUE) 
+
+
+edges <- edges %>% 
+  dplyr::left_join(nodes_true, by = "Source") %>% 
+  dplyr::select(Source, Target.x, Value.x, Value.y) %>% 
+   dplyr::rename(Target=Target.x, Value_s=Value.x, Value_i=Value.y) %>%
+  dplyr::select(Source, Target, Value_s, Value_i) %>% 
+  dplyr::mutate(dplyr::if_else(is.na(Value_i), 0, Value_i))
+
+
+
+
+
+#PLOT
+  p <- echarts4r::e_charts(animation=FALSE) %>% 
+    echarts4r::e_graph(roam=TRUE, 
+                       force= list( initLayout = "force", 
+                                    repulsion=100,
+                                    edgeLength=30,
+                                    layoutAnimation=FALSE),
+                       itemStyle=list(opacity=0.65),
+                       lineStyle=list(curveness=0.2, color=""), 
+                       emphasis=list(focus="adjacency", 
+                                     lineStyle=list(width=10))) %>% 
+    echarts4r::e_graph_nodes(nodes=nodes1, names = name,  value=value, size=size, category=grp) %>% 
+    echarts4r::e_graph_edges(edges=edges, source=Source, target=Target, value=Value_i, size = Value_i) %>%
+    echarts4r::e_color(c("blue", "red")) %>% 
+    echarts4r::e_labels(nodes1$name, font_size=4)%>%
+    echarts4r:: e_title("Network", "Up & Down Regulated") %>%
+    echarts4r::e_tooltip()
+  
 ```
-
 
 ```{r Network D3}
 
@@ -362,7 +437,6 @@ forceNetwork(Links = Edges_api_df,
 
 ```
 
-
 ```{r}
 plot_all (
   data = r6$stat_table,
@@ -370,8 +444,7 @@ plot_all (
   remove = "Down",
   score = 0.4,
   animation = FALSE,
-  layout = "circular",
+  layout = "force",
   no_edge = TRUE
 )
 ```
-
