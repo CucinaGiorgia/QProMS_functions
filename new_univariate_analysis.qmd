@@ -362,6 +362,7 @@ edges1 <- unique_df %>%
   dplyr::mutate(loop=if_else(Source==Target, 0, 1)) %>% 
   dplyr::filter(loop!=0) %>% 
   dplyr::select(Source, Target, Value) %>% 
+  as.double(Value) %>% 
   dplyr::mutate(column=0)
   
 
@@ -389,9 +390,12 @@ nodes_true <- edges1 %>%
 edges <- edges %>% 
   dplyr::left_join(nodes_true, by = "Source") %>% 
   dplyr::select(Source, Target.x, Value.x, Value.y) %>% 
-   dplyr::rename(Target=Target.x, Value_s=Value.x, Value_i=Value.y) %>%
-  dplyr::select(Source, Target, Value_s, Value_i) %>% 
-  dplyr::mutate(dplyr::if_else(is.na(Value_i), 0, Value_i))
+   dplyr::rename(Target=Target.x, Value_s=Value.x, Value_i=Value.y) %>% 
+  # dplyr::select(Source, Target, Value_s, Value_i) %>% 
+  as.double(Value_i) %>% 
+  dplyr::mutate(Value_i = dplyr::if_else(is.na(Value_i), 0, Value_i))
+
+  
 
 
 
