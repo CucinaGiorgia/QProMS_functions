@@ -305,7 +305,7 @@ for (i in 1:length(rba_list[[2]])) { # Iterate over the entries
       acc_interactor <- rba_list[["entities"]][[i]][["interactors"]][[j]][["acc"]] # Extract interactor name
       score_interactor <- rba_list[["entities"]][[i]][["interactors"]][[j]][["score"]] # Extract interactor score
       evidences_interactor <- rba_list[["entities"]][[i]][["interactors"]][[j]][["evidences"]]
-      if(evidences_interactor >3){
+      if(evidences_interactor >2){
         df<- rbind(df, data.frame(Source_Number = i,
                                   Source = acc_val,
                                   Target_Number = j,
@@ -344,6 +344,22 @@ for (i in 1:nrow(count_df)){
 }
 
 print(unique_df)
+
+edges_intact <- function (data){
+  data <- data %>% 
+    dplyr::select(Source, Target, Score) %>% 
+    dplyr::pull(Source) %>%
+    bitr(fromType="UNIPROT", toType="SYMBOL", OrgDb="org.Hs.eg.db") %>% 
+    dplyr::rename("Source"="SYMBOL") %>% 
+    dplyr::left_join(unique_df, by= c("UNIPROT"="Source")) %>% 
+    dplyr::select(Source, Target, Score)
+ 
+  return(data) 
+    
+}
+
+
+
 
 Source <- unique_df %>% 
   dplyr::select(Source, Target, Score) %>% 
@@ -391,9 +407,9 @@ edges <- edges %>%
   dplyr::left_join(nodes_true, by = "Source") %>% 
   dplyr::select(Source, Target.x, Value.x, Value.y) %>% 
    dplyr::rename(Target=Target.x, Value_s=Value.x, Value_i=Value.y) %>% 
-  # dplyr::select(Source, Target, Value_s, Value_i) %>% 
+  dplyr::select(Source, Target, Value_s, Value_i) %>% 
   as.double(Value_i) %>% 
-  dplyr::mutate(Value_i = dplyr::if_else(is.na(Value_i), 0, Value_i))
+  dplyr::mutate(dplyr::if_else(is.na(Value_i), 0, Value_i))
 
   
 
