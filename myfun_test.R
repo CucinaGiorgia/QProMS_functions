@@ -400,10 +400,17 @@ edges <- function(data, score=0.4, edgesize=5){
     dplyr::mutate(Names= paste0(preferredName_A, "_", preferredName_B)) %>% 
     dplyr::distinct(Names, .keep_all = TRUE) %>% 
     dplyr::rename(FROM = preferredName_A, TO=preferredName_B) %>%
-    dplyr::select(FROM,TO, escore) %>% 
-    dplyr::filter(escore>score) %>% #Filtro sullo score
-    dplyr::mutate(escore = escore*edgesize) %>% 
-    dplyr::rename(Source=FROM, Target=TO, Value=escore)
+    dplyr::mutate(totscore = escore+dscore) %>% 
+    dplyr::filter(!totscore== "0") %>%
+    dplyr::select(FROM,TO, escore, dscore) %>%
+    dplyr::mutate(Score1 = (escore-0.041)*(1-0.041)) %>% 
+    dplyr::mutate(Score2 = (dscore-0.041)*(1-0.041)) %>% 
+    dplyr::mutate(Score_combin = 1-(1-Score1)*(1-Score2)) %>% 
+    dplyr::mutate(tot_score= Score_combin+0.041*(1-Score_combin)) %>% 
+    dplyr::filter(tot_score>score) %>% #Filtro sullo score
+    dplyr::mutate(tot_score = tot_score*edgesize) %>% 
+    dplyr::select(FROM,TO, tot_score) %>% 
+    dplyr::rename(Source=FROM, Target=TO, Value=tot_score)
   
   return(data)
 }
@@ -454,4 +461,20 @@ plot_all <- function(data, test, remove, score=0.4, animation=FALSE, layout="for
   p <- plot_net(datanode=nodes, dataedge=edges, animation, layout)
   
   return(p)
+}
+
+
+### DATABASE SEARCH
+
+#SOURCE_DB
+source_db <- function (data){
+  data <- data %>% 
+    dplyr::select(Source, Target, Score) %>% 
+    dplyr::pull(Source) %>%
+    bitr(fromType="UNIPROT", toType="SYMBOL", OrgDb="org.Hs.eg.db") %>% 
+    dplyr::rename("Source"="SYMBOL") %>% 
+    dplyr::left_join(unique_df, by= c("UNIPROT"="Source")) %>% 
+    dplyr::select(Source, Target, Score)
+  
+  return(data) 
 }
