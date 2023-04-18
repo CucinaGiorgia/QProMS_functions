@@ -34,8 +34,8 @@ library(httr)
 library(jsonlite)
 library(rbioapi)
 
-source(file = "C:/Users/MSU/Documents/GC/Analysis/myfun_test.R")
-source(file = "C:/Users/MSU/Documents/GC/Analysis/theme_ggplot_test.R")
+source(file = "C:/Users/MSU/Documents/GC/Analysis/QProMS_test_functions/myfun_test.R")
+source(file = "C:/Users/MSU/Documents/GC/Analysis/QProMS_test_functions/theme_ggplot_test.R")
 
 source(file = here::here("r6class_app.R"))
 
@@ -257,10 +257,11 @@ sig <- significant(data=r6$stat_table, test = "rev_vs_dmso")
 ### Only Up-regulated
 
 ```{r Filter Significant Up}
-up_down <- sig_up_down(data=sig, remove="")
+up_down <- sig_up_down(data=sig, remove="Down")
 ```
 
 # STRINGdb
+
 ### Nodes & Edges
 
 ```{r Create Nodes & Edges}
@@ -269,7 +270,7 @@ nodes <- nodes(data=up_down)
 edges <- edges(data= nodes, score=0.4)
 ```
 
-### Filter Nodes 
+### Filter Nodes
 
 ```{r Filter Nodes Degree 0}
 nodes <- filter_nodes (datanodes =nodes, data_edges = edges)
@@ -280,6 +281,20 @@ nodes <- filter_nodes (datanodes =nodes, data_edges = edges)
 ```{r echart Network}
 plot_net(datanode=nodes, dataedge=edges)
 ```
+
+### From data to net
+```{r All from nodes to network}
+plot_all (
+  data = r6$stat_table,
+  test = "nw_vs_dmso",
+  remove = "Down",
+  score = 0.4,
+  animation = FALSE,
+  layout = "force",
+  no_edge = TRUE
+)
+```
+
 
 # INTACTdb
 
@@ -345,7 +360,9 @@ for (i in 1:nrow(count_df)){
 
 print(unique_df)
 
-edges_intact <- function (data){
+source_static <- source_db(data = unique_df)
+
+source_intact <- function (data){
   data <- data %>% 
     dplyr::select(Source, Target, Score) %>% 
     dplyr::pull(Source) %>%
@@ -358,8 +375,19 @@ edges_intact <- function (data){
     
 }
 
-
-
+edges_intact <- function(data){
+  data <- data %>% 
+  dplyr::pull(Target) %>%
+  bitr(fromType="UNIPROT", toType="SYMBOL", OrgDb="org.Hs.eg.db") %>% 
+  dplyr::rename("Target"="SYMBOL") %>%
+  dplyr::left_join(Source, by= c("UNIPROT"="Target")) %>% 
+  dplyr::rename("Value"="Score") %>%
+  dplyr::mutate(loop=if_else(Source==Target, 0, 1)) %>% 
+  dplyr::filter(loop!=0) %>% 
+  dplyr::select(Source, Target, Value) %>% 
+  as.double(Value) %>% 
+  dplyr::mutate(column=0)  
+}
 
 Source <- unique_df %>% 
   dplyr::select(Source, Target, Score) %>% 
@@ -437,34 +465,254 @@ edges <- edges %>%
   
 ```
 
-```{r Network D3}
 
-
-simpleNetwork(Edges_api_df,
-              fontSize = 15,
-              linkColour ="#013848",
-              zoom = TRUE)
-
-forceNetwork(Links = Edges_api_df,
-             Nodes = Nodes_api_df,
-             Source= "Source",
-             Target = "Target",
-             Value = "Value",
-             NodeID = "name",
-             Group ="grp",
-             Nodesize = "size")
-
-
-```
 
 ```{r}
-plot_all (
-  data = r6$stat_table,
-  test = "nw_vs_dmso",
-  remove = "Down",
-  score = 0.4,
-  animation = FALSE,
-  layout = "force",
-  no_edge = TRUE
-)
+intact <- prova %>% 
+  rba_reactome_interactors_psicquic(proteins=prova$SYMBOL, resource="IntAct", details = TRUE)
+
+#Create empty DataFrame
+df <- data.frame(Source_Number = numeric(), Source = numeric(), Target_Number = numeric(), Target = numeric(), Evidences=numeric(), Score = numeric())
+
+# Fill in the Data Frame                  
+for (i in 1:length(rba_list[[2]])) { # Iterate over the entries
+  acc_val <- rba_list[["entities"]][[i]][["acc"]] # Extract entry name
+  count_val <- rba_list[["entities"]][[i]][["count"]] # Extract count of interactors
+  if (count_val > 0) { # Consider only proteins with at least 1 interactor
+    for (j in 1:count_val) { # Iterate over the interactors
+      acc_interactor <- rba_list[["entities"]][[i]][["interactors"]][[j]][["acc"]] # Extract interactor name
+      score_interactor <- rba_list[["entities"]][[i]][["interactors"]][[j]][["score"]] # Extract interactor score
+      evidences_interactor <- rba_list[["entities"]][[i]][["interactors"]][[j]][["evidences"]]
+      if(evidences_interactor >2){
+        df<- rbind(df, data.frame(Source_Number = i,
+                                  Source = acc_val,
+                                  Target_Number = j,
+                                  Target = acc_interactor,
+                                  Evidences = evidences_interactor,
+                                  Score = score_interactor))
+      } else {
+        df <- rbind (df, data.frame(Source_Number=i,
+                                    Source = acc_val,
+                                    Target_Number = "NULL",
+                                    Target = "NULL",
+                                    Evidences="NULL",
+                                    Score = "NULL"))
+      }}} else {
+        df<- rbind (df, data.frame(Source_Number=i,
+                                    Source = acc_val,
+                                    Target_Number = "NULL",
+                                    Target = "NULL",
+                                    Evidences="NULL",
+                                    Score = "NULL"))
+      }
+}  
+print(df)
+
+intact_df <- df
+
+count_df <- unique(df) %>%
+  group_by (Source) %>%
+  count()
+
+for (i in 1:nrow(count_df)){
+  if(count_df[["n"]][i]>1){
+    unique_df <- unique_df %>%
+      filter(!(Source==count_df[["Source"]][i] & Score=="NULL"))
+  }
+}
+
+print(intact_df)
+
+
+source_intact <- source_db(data = intact_df)
+
+
+edges_intact <- function(data){
+  data <- data %>% 
+  dplyr::pull(Target) %>%
+  bitr(fromType="UNIPROT", toType="SYMBOL", OrgDb="org.Hs.eg.db") %>% 
+  dplyr::rename("Target"="SYMBOL") %>%
+  dplyr::left_join(Source, by= c("UNIPROT"="Target")) %>% 
+  dplyr::rename("Value"="Score") %>%
+  dplyr::mutate(loop=if_else(Source==Target, 0, 1)) %>% 
+  dplyr::filter(loop!=0) %>% 
+  dplyr::select(Source, Target, Value) %>% 
+  as.double(Value) %>% 
+  dplyr::mutate(column=0)  
+}
+
+
+edges1 <- unique_df %>% 
+  dplyr::pull(Target) %>%
+  bitr(fromType="UNIPROT", toType="SYMBOL", OrgDb="org.Hs.eg.db") %>% 
+  dplyr::rename("Target"="SYMBOL") %>%
+  dplyr::left_join(Source, by= c("UNIPROT"="Target")) %>% 
+  dplyr::rename("Value"="Score") %>%
+  dplyr::mutate(loop=if_else(Source==Target, 0, 1)) %>% 
+  dplyr::filter(loop!=0) %>% 
+  dplyr::select(Source, Target, Value) %>% 
+  as.double(Value) %>% 
+  dplyr::mutate(column=0)
+  
+
+
+nodes1<- prova %>% 
+  dplyr::select(!UNIPROT) %>% 
+  dplyr::rename(name=SYMBOL, value =p_adj, size = p_val, grp = regulation) %>% 
+    dplyr::mutate(value = -log10(value)) %>% 
+    dplyr::mutate(size = -log10(size)*5) %>% 
+    dplyr::mutate(grp = as.factor(grp)) %>% 
+  dplyr::mutate(column=0)
+
+
+
+nodes_true <- edges1 %>% 
+  dplyr::left_join(nodes1, by = "column") %>%
+  dplyr::mutate(node1=if_else(Target==name, 0, 1))  %>% 
+  dplyr::filter(node1=="0") %>% 
+  dplyr::select(Source, Target, Value) %>% 
+  distinct(Value, .keep_all = TRUE) 
+
+
+edges <- edges %>% 
+  dplyr::left_join(nodes_true, by = "Source") %>% 
+  dplyr::select(Source, Target.x, Value.x, Value.y) %>% 
+   dplyr::rename(Target=Target.x, Value_s=Value.x, Value_i=Value.y) %>% 
+  dplyr::select(Source, Target, Value_s, Value_i) %>% 
+  as.double(Value_i) %>% 
+  dplyr::mutate(dplyr::if_else(is.na(Value_i), 0, Value_i))
 ```
+
+
+```{r}
+Biogrid <- prova %>% 
+  rba_reactome_interactors_psicquic(proteins=prova$SYMBOL, resource="BioGrid", details = TRUE)
+
+#Create empty DataFrame
+df <- data.frame(Source_Number = numeric(), Source = numeric(), Target_Number = numeric(), Target = numeric(), Evidences=numeric(), Score = numeric())
+
+# Fill in the Data Frame                  
+for (i in 1:length(rba_list[[2]])) { # Iterate over the entries
+  acc_val <- rba_list[["entities"]][[i]][["acc"]] # Extract entry name
+  count_val <- rba_list[["entities"]][[i]][["count"]] # Extract count of interactors
+  if (count_val > 0) { # Consider only proteins with at least 1 interactor
+    for (j in 1:count_val) { # Iterate over the interactors
+      acc_interactor <- rba_list[["entities"]][[i]][["interactors"]][[j]][["acc"]] # Extract interactor name
+      score_interactor <- rba_list[["entities"]][[i]][["interactors"]][[j]][["score"]] # Extract interactor score
+      evidences_interactor <- rba_list[["entities"]][[i]][["interactors"]][[j]][["evidences"]]
+      if(evidences_interactor >2){
+        df<- rbind(df, data.frame(Source_Number = i,
+                                  Source = acc_val,
+                                  Target_Number = j,
+                                  Target = acc_interactor,
+                                  Evidences = evidences_interactor,
+                                  Score = score_interactor))
+      } else {
+        df <- rbind (df, data.frame(Source_Number=i,
+                                    Source = acc_val,
+                                    Target_Number = "NULL",
+                                    Target = "NULL",
+                                    Evidences="NULL",
+                                    Score = "NULL"))
+      }}} else {
+        df<- rbind (df, data.frame(Source_Number=i,
+                                    Source = acc_val,
+                                    Target_Number = "NULL",
+                                    Target = "NULL",
+                                    Evidences="NULL",
+                                    Score = "NULL"))
+      }
+}  
+print(df)
+
+biogrid_df <- df
+
+count_df <- unique(df) %>%
+  group_by (Source) %>%
+  count()
+
+for (i in 1:nrow(count_df)){
+  if(count_df[["n"]][i]>1){
+    unique_df <- unique_df %>%
+      filter(!(Source==count_df[["Source"]][i] & Score=="NULL"))
+  }
+}
+
+print(biogrid_df)
+
+source_db <- function (data){
+  data <- data %>% 
+    dplyr::select(Source, Target, Score) %>% 
+    dplyr::pull(Source) %>%
+    bitr(fromType="UNIPROT", toType="SYMBOL", OrgDb="org.Hs.eg.db") %>% 
+    dplyr::rename("Source"="SYMBOL") %>% 
+    dplyr::left_join(unique_df, by= c("UNIPROT"="Source")) %>% 
+    dplyr::select(Source, Target, Score)
+ 
+  return(data) 
+    
+}
+
+source_biogrid <- source_db (biogrid_df)
+
+edges_db <- function(data){
+  data <- data %>% 
+  dplyr::pull(Target) %>%
+  bitr(fromType="UNIPROT", toType="SYMBOL", OrgDb="org.Hs.eg.db") %>% 
+  dplyr::rename("Target"="SYMBOL") %>%
+  dplyr::left_join(Source, by= c("UNIPROT"="Target")) %>% 
+  dplyr::rename("Value"="Score") %>%
+  dplyr::mutate(loop=if_else(Source==Target, 0, 1)) %>% 
+  dplyr::filter(loop!=0) %>% 
+  dplyr::select(Source, Target, Value) %>% 
+  as.double(Value) %>% 
+  dplyr::mutate(column=0)  
+  
+  return(data)
+}
+
+edges_biogrid <- edges_db (biogrid_df)
+
+edges1 <- unique_df %>% 
+  dplyr::pull(Target) %>%
+  bitr(fromType="UNIPROT", toType="SYMBOL", OrgDb="org.Hs.eg.db") %>% 
+  dplyr::rename("Target"="SYMBOL") %>%
+  dplyr::left_join(Source, by= c("UNIPROT"="Target")) %>% 
+  dplyr::rename("Value"="Score") %>%
+  dplyr::mutate(loop=if_else(Source==Target, 0, 1)) %>% 
+  dplyr::filter(loop!=0) %>% 
+  dplyr::select(Source, Target, Value) %>% 
+  as.double(Value) %>% 
+  dplyr::mutate(column=0)
+  
+
+
+nodes1<- prova %>% 
+  dplyr::select(!UNIPROT) %>% 
+  dplyr::rename(name=SYMBOL, value =p_adj, size = p_val, grp = regulation) %>% 
+    dplyr::mutate(value = -log10(value)) %>% 
+    dplyr::mutate(size = -log10(size)*5) %>% 
+    dplyr::mutate(grp = as.factor(grp)) %>% 
+  dplyr::mutate(column=0)
+
+
+
+plot_net(datanode=nodes, dataedge=edges)
+
+nodes_true <- edges1 %>% 
+  dplyr::left_join(nodes1, by = "column") %>%
+  dplyr::mutate(node1=if_else(Target==name, 0, 1))  %>% 
+  dplyr::filter(node1=="0") %>% 
+  dplyr::select(Source, Target, Value) %>% 
+  distinct(Value, .keep_all = TRUE) 
+
+
+edges <- edges %>% 
+  dplyr::left_join(nodes_true, by = "Source") %>% 
+  dplyr::select(Source, Target.x, Value.x, Value.y) %>% 
+   dplyr::rename(Target=Target.x, Value_s=Value.x, Value_i=Value.y) %>% 
+  dplyr::select(Source, Target, Value_s, Value_i) %>% 
+  as.double(Value_i) %>% 
+  dplyr::mutate(dplyr::if_else(is.na(Value_i), 0, Value_i))
+```
+
