@@ -283,6 +283,7 @@ plot_net(datanode=nodes, dataedge=edges)
 ```
 
 ### From data to net
+
 ```{r All from nodes to network}
 plot_all (
   data = r6$stat_table,
@@ -294,7 +295,6 @@ plot_all (
   no_edge = TRUE
 )
 ```
-
 
 # INTACTdb
 
@@ -318,7 +318,7 @@ for (i in 1:length(rba_list[[2]])) { # Iterate over the entries
   if (count_val > 0) { # Consider only proteins with at least 1 interactor
     for (j in 1:count_val) { # Iterate over the interactors
       acc_interactor <- rba_list[["entities"]][[i]][["interactors"]][[j]][["acc"]] # Extract interactor name
-      score_interactor <- rba_list[["entities"]][[i]][["interactors"]][[j]][["score"]] # Extract interactor score
+      score_interactor <- rba_list[["entities"]][[i]][["interactors"]][[j]][["score"]] # Extract score
       evidences_interactor <- rba_list[["entities"]][[i]][["interactors"]][[j]][["evidences"]]
       if(evidences_interactor >2){
         df<- rbind(df, data.frame(Source_Number = i,
@@ -360,20 +360,10 @@ for (i in 1:nrow(count_df)){
 
 print(unique_df)
 
+#Back to Source Gene Name
 source_static <- source_db(data = unique_df)
 
-source_intact <- function (data){
-  data <- data %>% 
-    dplyr::select(Source, Target, Score) %>% 
-    dplyr::pull(Source) %>%
-    bitr(fromType="UNIPROT", toType="SYMBOL", OrgDb="org.Hs.eg.db") %>% 
-    dplyr::rename("Source"="SYMBOL") %>% 
-    dplyr::left_join(unique_df, by= c("UNIPROT"="Source")) %>% 
-    dplyr::select(Source, Target, Score)
- 
-  return(data) 
-    
-}
+
 
 edges_intact <- function(data){
   data <- data %>% 
@@ -389,13 +379,7 @@ edges_intact <- function(data){
   dplyr::mutate(column=0)  
 }
 
-Source <- unique_df %>% 
-  dplyr::select(Source, Target, Score) %>% 
-  dplyr::pull(Source) %>%
-  bitr(fromType="UNIPROT", toType="SYMBOL", OrgDb="org.Hs.eg.db") %>% 
-  dplyr::rename("Source"="SYMBOL") %>% 
-  dplyr::left_join(unique_df, by= c("UNIPROT"="Source")) %>% 
-  dplyr::select(Source, Target, Score)
+
 
 edges1 <- unique_df %>% 
   dplyr::pull(Target) %>%
@@ -539,6 +523,8 @@ edges_intact <- function(data){
   dplyr::select(Source, Target, Value) %>% 
   as.double(Value) %>% 
   dplyr::mutate(column=0)  
+  
+  return(data)
 }
 
 
@@ -573,4 +559,3 @@ edges <- edges %>%
   as.double(Value_i) %>% 
   dplyr::mutate(dplyr::if_else(is.na(Value_i), 0, Value_i))
 ```
-
