@@ -308,6 +308,8 @@ prova <- nodes %>%
 
 rba_list <- rba_reactome_interactors_static(proteins=prova$UNIPROT, endpoint = "details")
 
+
+
 #Create empty DataFrame
 df <- data.frame(Source_Number = numeric(), Source = numeric(), Target_Number = numeric(), Target = numeric(), Evidences=numeric(), Score = numeric())
 
@@ -453,7 +455,8 @@ edges <- edges %>%
 
 ```{r Intact PSICQUIC }
 intact <- nodes %>% 
-  rba_reactome_interactors_psicquic(proteins=nodes$name, resource="IntAct", details = TRUE)
+  pull(name) %>% 
+  rba_reactome_interactors_psicquic(resource="IntAct", details = TRUE)
 
 #Create empty DataFrame
 df <- data.frame(Source_Number = numeric(), Source = numeric(), Target_Number = numeric(), Target = numeric(), Evidences=numeric(), Score = numeric())
@@ -559,3 +562,54 @@ edges <- edges %>%
   as.double(Value_i) %>% 
   dplyr::mutate(dplyr::if_else(is.na(Value_i), 0, Value_i))
 ```
+
+
+```{r}
+genes <- sig %>% 
+  dplyr::filter(regulation == "down") %>% 
+  pull(gene_names) 
+
+purrr::map(.x = 1:115,
+               .f = ~ intact_list$entities[[.x]])
+
+intact_edge <- function(gene_vector){
+  
+  intact_list <-
+    rba_reactome_interactors_psicquic(gene_vector, resource = "IntAct", details = TRUE) 
+  
+  all_interactions <-
+    purrr::map(.x = 1:length(gene_vector),
+               .f = ~ intact_list$entities[[.x]])
+  
+  res <-
+    purrr::map(.x = all_interactions, .f = ~ keep_only_if_present(.x)) %>%
+    purrr::compact() %>%
+    purrr::reduce(bind_rows) %>%
+    dplyr::select(source, alias, score, accURL, evidences) %>%
+    tidyr::drop_na() %>%
+    dplyr::filter(source != alias)
+  
+  return(res)
+}
+
+keep_only_if_present <- function(lista) {
+  
+  n_interaction <- lista$count
+  name_source <- lista$acc
+  
+  res <-
+    purrr::map(
+      .x = 1:n_interaction,
+      .f = ~ lista$interactors[[.x]] %>% purrr::list_modify(source = name_source)
+    ) %>%
+    purrr::keep( ~ all(.x$alias %in% pull(nodes, name))) 
+  
+  return(res)
+}
+
+genes <- nodes %>% pull(name)
+
+intact_edge(genes)
+
+```
+
