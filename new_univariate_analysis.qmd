@@ -563,7 +563,6 @@ edges <- edges %>%
   dplyr::mutate(dplyr::if_else(is.na(Value_i), 0, Value_i))
 ```
 
-
 ```{r}
 genes <- sig %>% 
   dplyr::filter(regulation == "down") %>% 
@@ -613,3 +612,39 @@ intact_edge(genes)
 
 ```
 
+```{r}
+library(OmnipathR)
+
+
+ complexes <- import_omnipath_complexes(resources = "CORUM")
+ query <- nodes$name
+ 
+ complexes_query_genes_any <- unique(get_complex_genes(complexes,query,
+    total_match=FALSE))
+
+ complexes_query_genes_any %>%  tidyr::separate_rows(components_genesymbols, sep = "_") %>%
+   dplyr::filter(components_genesymbols %in% query) %>%  
+   janitor::get_dupes(name) %>%
+   dplyr::select(name, dupe_count, components_genesymbols) %>% 
+   dplyr::filter(dupe_count == 2) %>%
+   dplyr::group_by(name) %>% 
+   dplyr::group_map() %>% 
+   dplyr::mutate(target = components_genesymbols) %>% 
+   tidyr::crossing(components_genesymbols, target, .name_repair = "minimal" ) %>% 
+   View()
+   dplyr::mutate(unique_names = paste0( name, "__", components_genesymbols)) %>% 
+   dplyr::distinct(unique_names, .keep_all = TRUE) %>% 
+   dplyr::select(unique_names, name, components_genesymbols) %>% 
+   dplyr::group_by(name) %>% 
+   tidyr::separate_longer_delim(unique_names, delim = "__") %>% 
+ 
+
+
+?dplyr::group_map
+ 
+  
+     
+ 
+
+
+```

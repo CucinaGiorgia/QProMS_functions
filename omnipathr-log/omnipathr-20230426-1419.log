@@ -1,0 +1,13 @@
+[2023-04-26 14:19:03] [INFO]    [OmnipathR] Welcome to OmnipathR!
+[2023-04-26 14:19:03] [INFO]    [OmnipathR] Initialized cache: `C:\Users\MSU\AppData\Local\Cache\OmnipathR`.
+[2023-04-26 14:19:03] [INFO]    [OmnipathR] Welcome to OmnipathR!
+[2023-04-26 14:19:04] [INFO]    [OmnipathR] Initialized cache: `C:\Users\MSU\AppData\Local\Cache\OmnipathR`.
+[2023-04-26 14:35:09] [INFO]    [OmnipathR] Cache record does not exist: `https://omnipathdb.org/complexes?resources=CORUM&license=academic`
+[2023-04-26 14:35:09] [INFO]    [OmnipathR] Retrieving URL: `https://omnipathdb.org/complexes?resources=CORUM&license=academic`
+[2023-04-26 14:35:09] [TRACE]   [OmnipathR] Attempt 1/3: `https://omnipathdb.org/complexes?resources=CORUM&license=academic`
+[2023-04-26 14:35:10] [INFO]    [OmnipathR] Cache item `a936d047aec5e3fcc61b42b75f13587cc2b40099` version 1: status changed from `unknown` to `started`.
+[2023-04-26 14:35:10] [TRACE]   [OmnipathR] Exporting object to RDS: `C:\Users\MSU\AppData\Local\Cache\OmnipathR/a936d047aec5e3fcc61b42b75f13587cc2b40099-1.rds`.
+[2023-04-26 14:35:10] [TRACE]   [OmnipathR] Exported RDS to `C:\Users\MSU\AppData\Local\Cache\OmnipathR/a936d047aec5e3fcc61b42b75f13587cc2b40099-1.rds`.
+[2023-04-26 14:35:10] [INFO]    [OmnipathR] Download ready [key=a936d047aec5e3fcc61b42b75f13587cc2b40099, version=1]
+[2023-04-26 14:35:10] [INFO]    [OmnipathR] Cache item `a936d047aec5e3fcc61b42b75f13587cc2b40099` version 1: status changed from `started` to `ready`.
+[2023-04-26 14:35:10] [SUCCESS] [OmnipathR] Downloaded 2734 protein complexes.
