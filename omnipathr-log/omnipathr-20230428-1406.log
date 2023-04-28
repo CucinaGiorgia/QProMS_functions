@@ -1,0 +1,5 @@
+[2023-04-28 14:06:59] [INFO]    [OmnipathR] Welcome to OmnipathR!
+[2023-04-28 14:06:59] [INFO]    [OmnipathR] Initialized cache: `C:\Users\MSU\AppData\Local\Cache\OmnipathR`.
+[2023-04-28 14:07:00] [TRACE]   [OmnipathR] Loaded data from RDS `C:\Users\MSU\AppData\Local\Cache\OmnipathR/a936d047aec5e3fcc61b42b75f13587cc2b40099-1.rds`.
+[2023-04-28 14:07:00] [INFO]    [OmnipathR] Loaded from cache: `https://omnipathdb.org/complexes?resources=CORUM&license=academic`
+[2023-04-28 14:07:00] [SUCCESS] [OmnipathR] Loaded 2734 protein complexes from cache.
