@@ -23,7 +23,7 @@ library(gt)
 library(visNetwork)
 library(ggplot2)
 library(vsn)
-library(corrmorant)
+#Ho rimosso in pacchetto corrmorant perchè dava errore su Mac
 library(ComplexHeatmap)
 library(STRINGdb)
 library(igraph)
@@ -34,8 +34,8 @@ library(httr)
 library(jsonlite)
 library(rbioapi)
 
-source(file = "C:/Users/MSU/Documents/GC/Analysis/QProMS_test_functions/myfun_test.R")
-source(file = "C:/Users/MSU/Documents/GC/Analysis/QProMS_test_functions/theme_ggplot_test.R")
+source(file = here::here("myfun_test.R"))
+source(file = here::here("theme_ggplot_test.R"))
 
 source(file = here::here("r6class_app.R"))
 
@@ -52,7 +52,7 @@ raw_data <- loading_data(file_path = here::here("proteinGroups.txt"))
 
 ```{r loading-data-2}
 r6$loading_data(
-  input_path = "C:/Users/MSU/Documents/GC/Analysis/QProMS_test_functions/proteinGroups.txt",
+  input_path = "proteinGroups.txt",
   input_type = "max_quant"
 )
 ```
@@ -298,15 +298,16 @@ plot_all (
 
 # INTACTdb
 
+## Da togliere
 ```{r IntAct-static}
-prova <- nodes %>% 
+intact_nodes <- nodes %>% 
   pull(name) %>% 
   bitr(fromType="SYMBOL", toType="UNIPROT", OrgDb="org.Hs.eg.db") %>%
    dplyr::distinct(SYMBOL, .keep_all = TRUE) %>% 
   left_join(sig, by=c("SYMBOL"="gene_names")) 
 
 
-rba_list <- rba_reactome_interactors_static(proteins=prova$UNIPROT, endpoint = "details")
+rba_list <- rba_reactome_interactors_static(proteins=intact_nodes$UNIPROT, endpoint = "details")
 
 
 
@@ -427,161 +428,25 @@ edges <- edges %>%
 
   
 
-
-
-
-
-#PLOT Attempt
-  p <- echarts4r::e_charts(animation=FALSE) %>% 
-    echarts4r::e_graph(roam=TRUE, 
-                       force= list( initLayout = "force", 
-                                    repulsion=100,
-                                    edgeLength=30,
-                                    layoutAnimation=FALSE),
-                       itemStyle=list(opacity=0.65),
-                       lineStyle=list(curveness=0.2, color=""), 
-                       emphasis=list(focus="adjacency", 
-                                     lineStyle=list(width=10))) %>% 
-    echarts4r::e_graph_nodes(nodes=nodes1, names = name,  value=value, size=size, category=grp) %>% 
-    echarts4r::e_graph_edges(edges=edges, source=Source, target=Target, value=Value_i, size = Value_i) %>%
-    echarts4r::e_color(c("blue", "red")) %>% 
-    echarts4r::e_labels(nodes1$name, font_size=4)%>%
-    echarts4r:: e_title("Network", "Up & Down Regulated") %>%
-    echarts4r::e_tooltip()
-  
 ```
 
 ### IntAct PSICQUIC
 
-```{r Intact PSICQUIC }
-intact <- nodes %>% 
-  pull(name) %>% 
-  rba_reactome_interactors_psicquic(resource="IntAct", details = TRUE)
+```{r Intact PSICQUIC}
+genes <- sig %>%
+  dplyr::filter(regulation == "down") %>%
+  pull(gene_names)
 
-#Create empty DataFrame
-df <- data.frame(Source_Number = numeric(), Source = numeric(), Target_Number = numeric(), Target = numeric(), Evidences=numeric(), Score = numeric())
+# purrr::map(.x = 1:115,
+#            .f = ~ intact_list$entities[[.x]])
 
-# Fill in the Data Frame                  
-for (i in 1:length(rba_list[[2]])) { # Iterate over the entries
-  acc_val <- rba_list[["entities"]][[i]][["acc"]] # Extract entry name
-  count_val <- rba_list[["entities"]][[i]][["count"]] # Extract count of interactors
-  if (count_val > 0) { # Consider only proteins with at least 1 interactor
-    for (j in 1:count_val) { # Iterate over the interactors
-      acc_interactor <- rba_list[["entities"]][[i]][["interactors"]][[j]][["acc"]] # Extract interactor name
-      score_interactor <- rba_list[["entities"]][[i]][["interactors"]][[j]][["score"]] # Extract interactor score
-      evidences_interactor <- rba_list[["entities"]][[i]][["interactors"]][[j]][["evidences"]]
-      if(evidences_interactor >2){
-        df<- rbind(df, data.frame(Source_Number = i,
-                                  Source = acc_val,
-                                  Target_Number = j,
-                                  Target = acc_interactor,
-                                  Evidences = evidences_interactor,
-                                  Score = score_interactor))
-      } else {
-        df <- rbind (df, data.frame(Source_Number=i,
-                                    Source = acc_val,
-                                    Target_Number = "NULL",
-                                    Target = "NULL",
-                                    Evidences="NULL",
-                                    Score = "NULL"))
-      }}} else {
-        df<- rbind (df, data.frame(Source_Number=i,
-                                    Source = acc_val,
-                                    Target_Number = "NULL",
-                                    Target = "NULL",
-                                    Evidences="NULL",
-                                    Score = "NULL"))
-      }
-}  
-print(df)
-
-intact_df <- df
-
-count_df <- unique(df) %>%
-  group_by (Source) %>%
-  count()
-
-for (i in 1:nrow(count_df)){
-  if(count_df[["n"]][i]>1){
-    unique_df <- unique_df %>%
-      filter(!(Source==count_df[["Source"]][i] & Score=="NULL"))
-  }
-}
-
-print(intact_df)
-
-#Trasformo Source in SYMBOL
-source_intact <- source_db(data = intact_df)
-
-#Trasformo Target in SYMBOL
-edges_intact <- function(data){
-  data <- data %>% 
-  dplyr::pull(Target) %>%
-  bitr(fromType="UNIPROT", toType="SYMBOL", OrgDb="org.Hs.eg.db") %>% 
-  dplyr::rename("Target"="SYMBOL") %>%
-  dplyr::left_join(Source, by= c("UNIPROT"="Target")) %>% 
-  dplyr::rename("Value"="Score") %>%
-  dplyr::mutate(loop=if_else(Source==Target, 0, 1)) %>% 
-  dplyr::filter(loop!=0) %>% 
-  dplyr::select(Source, Target, Value) %>% 
-  as.double(Value) %>% 
-  dplyr::mutate(column=0)  
+intact_edge <- function(gene_vector) {
+  intact_list <- rba_reactome_interactors_psicquic(gene_vector, resource = "IntAct", details = TRUE)
   
-  return(data)
-}
-
-
-edges1 <- source_intact %>% 
-  dplyr::pull(Target) %>%
-  bitr(fromType="UNIPROT", toType="SYMBOL", OrgDb="org.Hs.eg.db") %>% 
-  dplyr::rename("Target"="SYMBOL") %>%
-  dplyr::left_join(source_intact, by= c("UNIPROT"="Target")) %>% 
-  dplyr::rename("Value"="Score") %>%
-  dplyr::mutate(loop=if_else(Source==Target, 0, 1)) %>% 
-  dplyr::filter(loop!=0) %>% 
-  dplyr::select(Source, Target, Value) %>% 
-  dplyr::mutate(column=0) 
-
-nodes0 <- nodes %>% 
-  dplyr::mutate(column=0)
-
-nodes_true <- edges1 %>% 
-  dplyr::left_join(nodes0, by = "column") %>%
-  dplyr::mutate(node1=if_else(Target==name, 0, 1))  %>%
-  dplyr::mutate(node2=if_else(Source==name, 0, 1)) %>% 
-  dplyr::filter(node=="0") %>% 
-  dplyr::select(Source, Target, Value) %>% 
-  distinct(Value, .keep_all = TRUE) 
-
-
-edges <- edges %>% 
-  dplyr::left_join(nodes_true, by = "Source") %>% 
-  dplyr::select(Source, Target.x, Value.x, Value.y) %>% 
-   dplyr::rename(Target=Target.x, Value_s=Value.x, Value_i=Value.y) %>% 
-  dplyr::select(Source, Target, Value_s, Value_i) %>% 
-  as.double(Value_i) %>% 
-  dplyr::mutate(dplyr::if_else(is.na(Value_i), 0, Value_i))
-```
-
-```{r}
-genes <- sig %>% 
-  dplyr::filter(regulation == "down") %>% 
-  pull(gene_names) 
-
-purrr::map(.x = 1:115,
-               .f = ~ intact_list$entities[[.x]])
-
-intact_edge <- function(gene_vector){
+  all_interactions <- purrr::map(.x = 1:length(gene_vector),
+                                 .f = ~ intact_list$entities[[.x]])
   
-  intact_list <-
-    rba_reactome_interactors_psicquic(gene_vector, resource = "IntAct", details = TRUE) 
-  
-  all_interactions <-
-    purrr::map(.x = 1:length(gene_vector),
-               .f = ~ intact_list$entities[[.x]])
-  
-  res <-
-    purrr::map(.x = all_interactions, .f = ~ keep_only_if_present(.x)) %>%
+  res <- purrr::map(.x = all_interactions, .f = ~ keep_only_if_present(.x)) %>%
     purrr::compact() %>%
     purrr::reduce(bind_rows) %>%
     dplyr::select(source, alias, score, accURL, evidences) %>%
@@ -592,7 +457,6 @@ intact_edge <- function(gene_vector){
 }
 
 keep_only_if_present <- function(lista) {
-  
   n_interaction <- lista$count
   name_source <- lista$acc
   
@@ -601,7 +465,7 @@ keep_only_if_present <- function(lista) {
       .x = 1:n_interaction,
       .f = ~ lista$interactors[[.x]] %>% purrr::list_modify(source = name_source)
     ) %>%
-    purrr::keep( ~ all(.x$alias %in% pull(nodes, name))) 
+    purrr::keep(~ all(.x$alias %in% pull(nodes, name)))
   
   return(res)
 }
@@ -612,53 +476,70 @@ intact_edge(genes)
 
 ```
 
-```{r}
+```{r CORUM}
 library(OmnipathR)
 
 
- complexes <- import_omnipath_complexes(resources = "CORUM")
- query <- nodes$name
- 
- complexes_query_genes_any <- unique(get_complex_genes(complexes,query,
-    total_match=FALSE))
+complexes <- import_omnipath_complexes(resources = "CORUM")
+query <- nodes$name
+
+complexes_query_genes_any <-
+  unique(get_complex_genes(complexes, query,
+                           total_match = FALSE))
 
 edges_corum <-  complexes_query_genes_any %>%
-   dplyr::select(name, components_genesymbols) %>% 
-   tidyr::separate_rows(components_genesymbols, sep = "_") %>%
-   dplyr::filter(components_genesymbols %in% query) %>%
-   dplyr::mutate(unique_names = paste0( name, "__", components_genesymbols)) %>% 
-   dplyr::distinct(unique_names, .keep_all = TRUE) %>% 
-   dplyr::select(name, components_genesymbols) %>% 
-   get_dupes(name) %>%
-   dplyr::filter(dupe_count == 2) %>%
-   tibble::rowid_to_column() %>%
-   dplyr::mutate(nodi = if_else(gtools::odd(rowid), "nodo", "target")) %>% 
-   dplyr::select(name, nodi, components_genesymbols) %>% 
-   tidyr::pivot_wider(name, values_from = components_genesymbols, names_from = nodi) %>% 
-   dplyr::mutate(Value=10) %>% 
-   dplyr::rename(Source=nodo, Target=target) %>% 
-   dplyr::select(Source, Target, Value)
+  dplyr::select(name, components_genesymbols) %>%
+  tidyr::separate_rows(components_genesymbols, sep = "_") %>%
+  dplyr::filter(components_genesymbols %in% query) %>%
+  dplyr::mutate(unique_names = paste0(name, "__", components_genesymbols)) %>%
+  dplyr::distinct(unique_names, .keep_all = TRUE) %>%
+  dplyr::select(name, components_genesymbols) %>%
+  get_dupes(name) %>%
+  dplyr::filter(dupe_count == 2) %>%
+  tibble::rowid_to_column() %>%
+  dplyr::mutate(nodi = if_else(gtools::odd(rowid), "nodo", "target")) %>%
+  dplyr::select(name, nodi, components_genesymbols) %>%
+  tidyr::pivot_wider(name, values_from = components_genesymbols, names_from = nodi) %>%
+  dplyr::mutate(Value = 10) %>%
+  dplyr::rename(Source = nodo, Target = target) %>%
+  dplyr::select(Source, Target, Value)
 
  plot_net(datanode=nodes, dataedge=edges_corum)
   
      
- echarts4r::e_charts(animation=FALSE) %>% 
-    echarts4r::e_graph(roam=TRUE, 
-                       force= list( initLayout = "force", 
-                                    repulsion=100,
-                                    edgeLength=30,
-                                    layoutAnimation=FALSE),
-                       itemStyle=list(opacity=0.65),
-                       lineStyle=list(curveness=0.2), 
-                       emphasis=list(focus="adjacency", 
-                                     lineStyle=list(width=10))) %>% 
-    echarts4r::e_graph_nodes(nodes=nodes, names = name,  value=value, size=size, category=grp) %>% 
-    echarts4r::e_graph_edges(edges=edges_corum, source=Source, target=Target, value=Value, size = Value) %>%
-    echarts4r::e_color(c("blue", "red")) %>% 
-    echarts4r::e_labels(nodes$name, font_size=4)%>%
-    echarts4r:: e_title("Network", "Up & Down Regulated") %>%
-    echarts4r::e_tooltip()
-
+ echarts4r::e_charts(animation = FALSE) %>%
+   echarts4r::e_graph(
+     roam = TRUE,
+     force = list(
+       initLayout = "force",
+       repulsion = 100,
+       edgeLength = 30,
+       layoutAnimation = FALSE
+     ),
+     itemStyle = list(opacity = 0.65),
+     lineStyle = list(curveness = 0.2),
+     emphasis = list(focus = "adjacency",
+                     lineStyle = list(width = 10))
+   ) %>%
+   echarts4r::e_graph_nodes(
+     nodes = nodes,
+     names = name,
+     value = value,
+     size = size,
+     category = grp
+   ) %>%
+   echarts4r::e_graph_edges(
+     edges = edges_corum,
+     source = Source,
+     target = Target,
+     value = Value,
+     size = Value
+   ) %>%
+   echarts4r::e_color(c("blue", "red")) %>%
+   echarts4r::e_labels(nodes$name, font_size = 4) %>%
+   echarts4r::e_title("Network", "Up & Down Regulated") %>%
+   echarts4r::e_tooltip()
+ 
 
  edges_all <-  edges %>% dplyr::bind_rows(edges_corum) %>% 
    dplyr::mutate(color= if_else(Value==10, "red","green")) %>% as.data.frame()
@@ -758,8 +639,6 @@ nodes <- nodes %>%
   View()
 ```
 
-
-
 ```{r}
 a <- complexes_query_genes_any %>%
   dplyr::select(name, components_genesymbols) %>%
@@ -778,4 +657,3 @@ b <- tidyr::expand_grid(Target = a, Source = a) %>%
 
 final_edge <- b %>% bind_rows(edges_corum)
 ```
-
