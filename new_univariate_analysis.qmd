@@ -426,8 +426,6 @@ edges <- edges %>%
   as.double(Value_i) %>% 
   dplyr::mutate(dplyr::if_else(is.na(Value_i), 0, Value_i))
 
-  
-
 ```
 
 ### IntAct PSICQUIC
