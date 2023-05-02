@@ -3,11 +3,11 @@ title: "New Univariate Analysis"
 format: html
 editor: visual
 warning: false
-editor_options: 
-  chunk_output_type: console
 ---
 
+
 ## Libraries loading and sources
+
 
 ```{r loading-libreries, echo=FALSE}
 library(data.table)
@@ -46,7 +46,9 @@ r6 <- QProMS$new()
 
 ```
 
+
 ## Loading raw data
+
 
 ```{r loading-data-1}
 raw_data <- loading_data(file_path = here::here("proteinGroups.txt"))
@@ -59,7 +61,9 @@ r6$loading_data(
 )
 ```
 
+
 ## Make Experimental Design
+
 
 ```{r make-expdesign-1}
 exp_des <- exp_design (data=raw_data, pattern_interest = "lfq_intensity_bc_")
@@ -71,7 +75,9 @@ r6$make_expdesign(
 )
 ```
 
+
 ## Data pre-processing
+
 
 ```{r Data preprocessing 1}
 data_pre <- pre_process (data=raw_data, pattern_interest =  "lfq_intensity_bc_")
@@ -81,7 +87,9 @@ data_pre <- pre_process (data=raw_data, pattern_interest =  "lfq_intensity_bc_")
 r6$pg_preprocessing()
 ```
 
+
 ## Data wrangling merged table (exp_des+pre_process)
+
 
 ```{r Wrangling/Data filtered}
 data_wrang <- data_wrangling(data=data_pre,
@@ -101,7 +109,9 @@ r6$data_wrangling(
 )
 ```
 
+
 ## Filter application
+
 
 ```{r Data Filtered}
 data_filt <- data_filtered(data = data_wrang,
@@ -109,7 +119,9 @@ data_filt <- data_filtered(data = data_wrang,
                            valid_val_thr = 0.75)
 ```
 
+
 ## Data imputation
+
 
 ```{r Data imputed}
 data_imput <- data_imputed (data= data_filt,
@@ -123,7 +135,9 @@ data_imput <- data_imputed (data= data_filt,
 r6$imputation()
 ```
 
+
 ## Color palette
+
 
 ```{r Palette}
 n_of_color <- max(exp_des %>% dplyr::count(replicate) %>% dplyr::pull(n))
@@ -131,7 +145,9 @@ color_palette <- viridis::viridis(n = n_of_color , direction = -1, end = 0.70, b
 
 ```
 
+
 ## Quality control
+
 
 ```{r Protein count by condition}
 barplot_count(data = data_filt)
@@ -158,7 +174,9 @@ boxplot(data=data_filt)
 r6$plot_distribution()
 ```
 
+
 ## Plots
+
 
 ```{r Missing data distribution}
 densityplot(data=data_filt)
@@ -192,7 +210,9 @@ htmap(data = data_filt)
 r6$plot_correlation_interactive()
 ```
 
+
 ## PCA
+
 
 ```{r PCA 1}
 pca <- prcomp(t(mat(data= data_imput)), center = TRUE, scale = TRUE) 
@@ -214,7 +234,9 @@ pca_plot(data=pca_table)
 r6$plot_pca(view_3d = FALSE)
 ```
 
+
 ## Statistical Analysis
+
 
 ```{r Statistics t-test}
 r6$define_tests()
@@ -227,7 +249,9 @@ r6$stat_t_test(
 )
 ```
 
+
 ## Volcao Plot
+
 
 ```{r VOlcano}
 data <- r6$stat_table%>% 
@@ -250,21 +274,27 @@ print(data)
 r6$plot_volcano(test = tests, highlights_names = c("VCAN", "STAT3"))
 ```
 
+
 ## Significant Data
+
 
 ```{r Dataset significat}
 sig <- significant(data=r6$stat_table, test = "rev_vs_dmso")
 ```
 
+
 ### Only Up-regulated
+
 
 ```{r Filter Significant Up}
 up_down <- sig_up_down(data=sig, remove="Down")
 ```
 
+
 # STRINGdb
 
 ### Nodes & Edges
+
 
 ```{r Create Nodes & Edges}
 nodes <- nodes(data=up_down)
@@ -272,19 +302,25 @@ nodes <- nodes(data=up_down)
 edges <- edges(data= nodes, score=0.4)
 ```
 
+
 ### Filter Nodes
+
 
 ```{r Filter Nodes Degree 0}
 nodes <- filter_nodes (datanodes =nodes, data_edges = edges)
 ```
 
+
 ### Plot Network
+
 
 ```{r echart Network}
 plot_net(datanode=nodes, dataedge=edges)
 ```
 
+
 ### From data to net
+
 
 ```{r All from nodes to network}
 plot_all (
@@ -298,10 +334,12 @@ plot_all (
 )
 ```
 
+
 # INTACTdb
 
 ### IntAct PSICQUIC
 PSICQUIC mi permette di accedere a diversi databases utilizzando una singola funzione. In questo caso ho considerato solo Intact perchè per BioGrid e IMEx dava gli stessi risultati. Infatti i db sono tutti strettamente correllati e dipendenti tra loro.
+
 
 ```{r Intact PSICQUIC}
 genes <- sig %>%
@@ -374,7 +412,6 @@ edges_corum <-  complexes_query_genes_any %>%
  plot_net(datanode=nodes, dataedge=edges_corum) #Provo a plottare solo CORUM
 ```
 
-
 ```{r STRING+CORUM}
  edges_all <-  edges %>% dplyr::bind_rows(edges_corum) %>% 
    dplyr::mutate(color= if_else(Value==10, "red","green")) %>% as.data.frame() #Unisco CORUM a STRING
@@ -426,31 +463,31 @@ p <-echarts4r::e_charts(animation = FALSE) %>%
    echarts4r::e_title("Network", "Up & Down Regulated") %>%
    echarts4r::e_tooltip()
  
-
-
-
-
 # p[["x"]][["opts"]][["series"]][[1]][["links"]][[1]][["lineStyle"]] <- list(width =p[["x"]][["opts"]][["series"]][[1]][["links"]][[1]][["lineStyle"]][["width"]], color = "red")
-
-
-
 n_edges <- nrow(edges_all)
-color <- edges_all %>% pull(color)
 
+all_opt <- purrr::map(p, .x = 1:n_edges,
+             .f = ~p$x[[.x]]) %>% 
+  purrr::pluck("opts") %>% View()
 
-all_opt <- p %>% purrr::pluck("x", "opts", "series") %>%
-  purrr::chuck(1) %>%
-  purrr::pluck("links") %>% View()
+p %>% purrr::pluck("x", "opts", "series") %>% 
+  purrr::compact()
+  purrr::map(.x=n_edges,
+             .f= ~)
+  View()
 
-all_links <- p %>% purrr::map(.x = 1:n_edges,
-  .f = ~ all_opt[[.x]])%>% 
-  purrr::chuck(1) %>%  purrr::pluck("")
-
-  list(width = all_links, color = color)
-
-
-  
-# color<- edges_all %>% dplyr::filter(Source==source, Target==target) %>% pull(color) ## se il filter non è una riga sola bisogna fare qualcosa
+# color_edge <- function(list, edges) {
+#   n_edges <- nrow(edges)
+# 
+#    <-
+#     purrr::map(
+#       .x = 1:n_interaction,
+#       .f = ~ lista$interactors[[.x]] %>% purrr::list_modify(source = name_source)
+#     ) %>%
+#     purrr::keep(~ all(.x$alias %in% pull(nodes, name)))
+# 
+#   return(res)
+# }
 
 color_edge <- function(list, edges) {
   n_edges <- nrow(edges)
@@ -461,7 +498,6 @@ color_edge <- function(list, edges) {
       list[["x"]][["opts"]][["series"]][[1]][["links"]][[i]]$target
     color <-
       edge %>% dplyr::filter(Source == source, Target == target) %>% pull(color)
-    
     list[["x"]][["opts"]][["series"]][[1]][["links"]][[i]][["lineStyle"]] <-
       list(width = list[["x"]][["opts"]][["series"]][[1]][["links"]][[i]][["lineStyle"]][["width"]], color = color)
     
@@ -480,6 +516,7 @@ color_edge_single <- function(list, edge, index) {
   source<- list[["x"]][["opts"]][["series"]][[1]][["links"]][[index]]$source
   target<- list[["x"]][["opts"]][["series"]][[1]][["links"]][[index]]$target
   
+  color<- edge %>% dplyr::filter(Source==source, Target==target) %>% pull(color) ## se il filter non è una riga sola bisogna fare qualcosa
   
   list[["x"]][["opts"]][["series"]][[1]][["links"]][[index]][["lineStyle"]] <- 
     list(width =list[["x"]][["opts"]][["series"]][[1]][["links"]][[index]][["lineStyle"]][["width"]],
@@ -487,8 +524,6 @@ color_edge_single <- function(list, edge, index) {
    
   return(list)
 }
-
-
 n_edges<- nrow(edges_all)
 color_edge_single(p, edges_all, 2)
 
@@ -517,64 +552,5 @@ b <- tidyr::expand_grid(Target = a, Source = a) %>%
   dplyr::mutate(Value = 10)
 
 final_edge <- b %>% bind_rows(edges_corum)
-```
-
-```{r}
-go_data <- data.table::fread("ora_table.tsv")
-
-nodes_go <- go_data %>% 
-  tidyr::separate_rows(geneID, sep = "/") %>% 
-  dplyr::filter(group=="nw_vs_dmso_down") %>% 
-  dplyr::mutate(name=paste0(Description, "_", geneID)) %>% 
-  dplyr::select(Description, name, pvalue, p.adjust, qvalue, value=fold_change, grp=group) %>% 
-    tidyr::separate_rows(name, sep = "_") %>% 
-  dplyr::distinct(name, .keep_all = TRUE) %>% 
-  dplyr::mutate(size=dplyr::if_else(Description==name, value, 10)) %>% 
-  dplyr::mutate(symbol=dplyr::if_else(Description==name, "diamond", "circle")) %>% 
-  dplyr::mutate(label=dplyr::if_else(Description==name, name, ""))
-
-
-edges_go <- go_data%>% 
-  dplyr::filter(group== "nw_vs_dmso_down") %>% 
-  dplyr::select(Description, pvalue, p.adjust, qvalue, fold_change, geneID) %>% 
-  tidyr::separate_rows(geneID, sep = "/") %>% 
-    dplyr::select(source=Description, target= geneID, value=pvalue) %>% 
-  dplyr::mutate(size="1")
- 
-
-  echarts4r::e_charts() %>%
-   echarts4r::e_graph(
-     roam = TRUE,
-     force = list(
-       initLayout = "circular",
-       repulsion = 500,
-       edgeLength = 30,
-       layoutAnimation = FALSE
-     ),
-     autoCurveness = TRUE,
-     emphasis = list(focus = "adjacency",
-                     lineStyle = list(width = 10))
-   ) %>%
-   echarts4r::e_graph_nodes(
-     nodes = nodes_go,
-     names = name,
-     value = value,
-     size = size,
-     category = grp,
-     symbol=symbol
-   ) %>%
-   echarts4r::e_graph_edges(
-     edges = edges_go,
-     source = source,
-     target = target,
-     value = value,
-     size = size
-   ) %>%
-  #echarts4r::e_labels(nodes_go$label,font_size=4)%>%
-   echarts4r::e_title("Network", "Gene Ontology") %>%
-   echarts4r::e_tooltip()
-  
-
-
 ```
 

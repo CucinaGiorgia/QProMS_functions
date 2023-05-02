@@ -1,0 +1,15 @@
+[2023-05-02 10:24:58] [INFO]    [OmnipathR] Welcome to OmnipathR!
+[2023-05-02 10:24:58] [INFO]    [OmnipathR] Setting up new cache directory `/Users/giorgiacucina/Library/Caches/OmnipathR`.
+[2023-05-02 10:24:58] [INFO]    [OmnipathR] Initialized cache: `/Users/giorgiacucina/Library/Caches/OmnipathR`.
+[2023-05-02 10:25:09] [INFO]    [OmnipathR] Cache record does not exist: `https://omnipathdb.org/complexes?resources=CORUM&license=academic`
+[2023-05-02 10:25:09] [INFO]    [OmnipathR] Retrieving URL: `https://omnipathdb.org/complexes?resources=CORUM&license=academic`
+[2023-05-02 10:25:09] [TRACE]   [OmnipathR] Attempt 1/3: `https://omnipathdb.org/complexes?resources=CORUM&license=academic`
+[2023-05-02 10:25:09] [INFO]    [OmnipathR] Cache item `a936d047aec5e3fcc61b42b75f13587cc2b40099` version 1: status changed from `unknown` to `started`.
+[2023-05-02 10:25:09] [TRACE]   [OmnipathR] Exporting object to RDS: `/Users/giorgiacucina/Library/Caches/OmnipathR/a936d047aec5e3fcc61b42b75f13587cc2b40099-1.rds`.
+[2023-05-02 10:25:09] [TRACE]   [OmnipathR] Exported RDS to `/Users/giorgiacucina/Library/Caches/OmnipathR/a936d047aec5e3fcc61b42b75f13587cc2b40099-1.rds`.
+[2023-05-02 10:25:09] [INFO]    [OmnipathR] Download ready [key=a936d047aec5e3fcc61b42b75f13587cc2b40099, version=1]
+[2023-05-02 10:25:09] [INFO]    [OmnipathR] Cache item `a936d047aec5e3fcc61b42b75f13587cc2b40099` version 1: status changed from `started` to `ready`.
+[2023-05-02 10:25:09] [SUCCESS] [OmnipathR] Downloaded 2734 protein complexes.
+[2023-05-02 10:28:50] [TRACE]   [OmnipathR] Loaded data from RDS `/Users/giorgiacucina/Library/Caches/OmnipathR/a936d047aec5e3fcc61b42b75f13587cc2b40099-1.rds`.
+[2023-05-02 10:28:50] [INFO]    [OmnipathR] Loaded from cache: `https://omnipathdb.org/complexes?resources=CORUM&license=academic`
+[2023-05-02 10:28:50] [SUCCESS] [OmnipathR] Loaded 2734 protein complexes from cache.

@@ -466,15 +466,7 @@ plot_all <- function(data, test, remove, score=0.4, animation=FALSE, layout="for
 
 ### DATABASE SEARCH
 
-#SOURCE_DB
-source_db <- function (data){
-  data <- data %>% 
-    dplyr::select(Source, Target, Score) %>% 
-    dplyr::pull(Source) %>%
-    bitr(fromType="UNIPROT", toType="SYMBOL", OrgDb="org.Hs.eg.db") %>% 
-    dplyr::rename("Source"="SYMBOL") %>% 
-    dplyr::left_join(unique_df, by= c("UNIPROT"="Source")) %>% 
-    dplyr::select(Source, Target, Score)
-  
-  return(data) 
-}
+## Intact
+
+
+
