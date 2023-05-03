@@ -1,0 +1,44 @@
+[2023-05-03 14:00:06] [INFO]    [OmnipathR] Welcome to OmnipathR!
+[2023-05-03 14:00:06] [INFO]    [OmnipathR] Initialized cache: `C:\Users\MSU\AppData\Local\Cache\OmnipathR`.
+[2023-05-03 14:00:07] [TRACE]   [OmnipathR] Loaded data from RDS `C:\Users\MSU\AppData\Local\Cache\OmnipathR/a936d047aec5e3fcc61b42b75f13587cc2b40099-1.rds`.
+[2023-05-03 14:00:07] [INFO]    [OmnipathR] Loaded from cache: `https://omnipathdb.org/complexes?resources=CORUM&license=academic`
+[2023-05-03 14:00:07] [SUCCESS] [OmnipathR] Loaded 2734 protein complexes from cache.
+[2023-05-03 14:33:29] [TRACE]   [OmnipathR] Loaded data from RDS `C:\Users\MSU\AppData\Local\Cache\OmnipathR/a936d047aec5e3fcc61b42b75f13587cc2b40099-1.rds`.
+[2023-05-03 14:33:29] [INFO]    [OmnipathR] Loaded from cache: `https://omnipathdb.org/complexes?resources=CORUM&license=academic`
+[2023-05-03 14:33:29] [SUCCESS] [OmnipathR] Loaded 2734 protein complexes from cache.
+[2023-05-03 14:46:32] [TRACE]   [OmnipathR] Loaded data from RDS `C:\Users\MSU\AppData\Local\Cache\OmnipathR/a936d047aec5e3fcc61b42b75f13587cc2b40099-1.rds`.
+[2023-05-03 14:46:32] [INFO]    [OmnipathR] Loaded from cache: `https://omnipathdb.org/complexes?resources=CORUM&license=academic`
+[2023-05-03 14:46:32] [SUCCESS] [OmnipathR] Loaded 2734 protein complexes from cache.
+[2023-05-03 14:48:07] [TRACE]   [OmnipathR] Loaded data from RDS `C:\Users\MSU\AppData\Local\Cache\OmnipathR/a936d047aec5e3fcc61b42b75f13587cc2b40099-1.rds`.
+[2023-05-03 14:48:07] [INFO]    [OmnipathR] Loaded from cache: `https://omnipathdb.org/complexes?resources=CORUM&license=academic`
+[2023-05-03 14:48:07] [SUCCESS] [OmnipathR] Loaded 2734 protein complexes from cache.
+[2023-05-03 14:52:33] [TRACE]   [OmnipathR] Loaded data from RDS `C:\Users\MSU\AppData\Local\Cache\OmnipathR/a936d047aec5e3fcc61b42b75f13587cc2b40099-1.rds`.
+[2023-05-03 14:52:33] [INFO]    [OmnipathR] Loaded from cache: `https://omnipathdb.org/complexes?resources=CORUM&license=academic`
+[2023-05-03 14:52:33] [SUCCESS] [OmnipathR] Loaded 2734 protein complexes from cache.
+[2023-05-03 14:54:10] [TRACE]   [OmnipathR] Loaded data from RDS `C:\Users\MSU\AppData\Local\Cache\OmnipathR/a936d047aec5e3fcc61b42b75f13587cc2b40099-1.rds`.
+[2023-05-03 14:54:10] [INFO]    [OmnipathR] Loaded from cache: `https://omnipathdb.org/complexes?resources=CORUM&license=academic`
+[2023-05-03 14:54:10] [SUCCESS] [OmnipathR] Loaded 2734 protein complexes from cache.
+[2023-05-03 14:54:20] [TRACE]   [OmnipathR] Loaded data from RDS `C:\Users\MSU\AppData\Local\Cache\OmnipathR/a936d047aec5e3fcc61b42b75f13587cc2b40099-1.rds`.
+[2023-05-03 14:54:20] [INFO]    [OmnipathR] Loaded from cache: `https://omnipathdb.org/complexes?resources=CORUM&license=academic`
+[2023-05-03 14:54:20] [SUCCESS] [OmnipathR] Loaded 2734 protein complexes from cache.
+[2023-05-03 14:56:31] [TRACE]   [OmnipathR] Loaded data from RDS `C:\Users\MSU\AppData\Local\Cache\OmnipathR/a936d047aec5e3fcc61b42b75f13587cc2b40099-1.rds`.
+[2023-05-03 14:56:31] [INFO]    [OmnipathR] Loaded from cache: `https://omnipathdb.org/complexes?resources=CORUM&license=academic`
+[2023-05-03 14:56:31] [SUCCESS] [OmnipathR] Loaded 2734 protein complexes from cache.
+[2023-05-03 15:05:32] [TRACE]   [OmnipathR] Loaded data from RDS `C:\Users\MSU\AppData\Local\Cache\OmnipathR/a936d047aec5e3fcc61b42b75f13587cc2b40099-1.rds`.
+[2023-05-03 15:05:32] [INFO]    [OmnipathR] Loaded from cache: `https://omnipathdb.org/complexes?resources=CORUM&license=academic`
+[2023-05-03 15:05:32] [SUCCESS] [OmnipathR] Loaded 2734 protein complexes from cache.
+[2023-05-03 15:07:25] [TRACE]   [OmnipathR] Loaded data from RDS `C:\Users\MSU\AppData\Local\Cache\OmnipathR/a936d047aec5e3fcc61b42b75f13587cc2b40099-1.rds`.
+[2023-05-03 15:07:25] [INFO]    [OmnipathR] Loaded from cache: `https://omnipathdb.org/complexes?resources=CORUM&license=academic`
+[2023-05-03 15:07:25] [SUCCESS] [OmnipathR] Loaded 2734 protein complexes from cache.
+[2023-05-03 15:40:24] [TRACE]   [OmnipathR] Loaded data from RDS `C:\Users\MSU\AppData\Local\Cache\OmnipathR/a936d047aec5e3fcc61b42b75f13587cc2b40099-1.rds`.
+[2023-05-03 15:40:24] [INFO]    [OmnipathR] Loaded from cache: `https://omnipathdb.org/complexes?resources=CORUM&license=academic`
+[2023-05-03 15:40:24] [SUCCESS] [OmnipathR] Loaded 2734 protein complexes from cache.
+[2023-05-03 16:47:13] [TRACE]   [OmnipathR] Loaded data from RDS `C:\Users\MSU\AppData\Local\Cache\OmnipathR/a936d047aec5e3fcc61b42b75f13587cc2b40099-1.rds`.
+[2023-05-03 16:47:13] [INFO]    [OmnipathR] Loaded from cache: `https://omnipathdb.org/complexes?resources=CORUM&license=academic`
+[2023-05-03 16:47:13] [SUCCESS] [OmnipathR] Loaded 2734 protein complexes from cache.
+[2023-05-03 16:47:18] [TRACE]   [OmnipathR] Loaded data from RDS `C:\Users\MSU\AppData\Local\Cache\OmnipathR/a936d047aec5e3fcc61b42b75f13587cc2b40099-1.rds`.
+[2023-05-03 16:47:18] [INFO]    [OmnipathR] Loaded from cache: `https://omnipathdb.org/complexes?resources=CORUM&license=academic`
+[2023-05-03 16:47:18] [SUCCESS] [OmnipathR] Loaded 2734 protein complexes from cache.
+[2023-05-03 16:47:41] [TRACE]   [OmnipathR] Loaded data from RDS `C:\Users\MSU\AppData\Local\Cache\OmnipathR/a936d047aec5e3fcc61b42b75f13587cc2b40099-1.rds`.
+[2023-05-03 16:47:41] [INFO]    [OmnipathR] Loaded from cache: `https://omnipathdb.org/complexes?resources=CORUM&license=academic`
+[2023-05-03 16:47:41] [SUCCESS] [OmnipathR] Loaded 2734 protein complexes from cache.

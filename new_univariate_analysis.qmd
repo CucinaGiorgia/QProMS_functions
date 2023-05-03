@@ -253,7 +253,7 @@ r6$plot_volcano(test = tests, highlights_names = c("VCAN", "STAT3"))
 ## Significant Data
 
 ```{r Dataset significat}
-sig <- significant(data=r6$stat_table, test = "rev_vs_dmso")
+sig <- significant(data=r6$stat_table, test = "nw_vs_dmso")
 ```
 
 ### Only Up-regulated
@@ -301,6 +301,7 @@ plot_all (
 # INTACTdb
 
 ### IntAct PSICQUIC
+
 PSICQUIC mi permette di accedere a diversi databases utilizzando una singola funzione. In questo caso ho considerato solo Intact perchè per BioGrid e IMEx dava gli stessi risultati. Infatti i db sono tutti strettamente correllati e dipendenti tra loro.
 
 ```{r Intact PSICQUIC}
@@ -344,6 +345,8 @@ intact_edge(genes)
 
 ```
 
+
+## CORUM
 ```{r CORUM}
 library(OmnipathR)
 
@@ -369,33 +372,105 @@ edges_corum <-  complexes_query_genes_any %>%
   tidyr::pivot_wider(name, values_from = components_genesymbols, names_from = nodi) %>%
   dplyr::mutate(Value = 10) %>%
   dplyr::rename(Source = nodo, Target = target) %>%
+  dplyr::select(Source, Target, Value) %>% 
+  dplyr::mutate(names = paste0(Source, "__", Target)) %>%
+  dplyr::distinct(names, .keep_all = TRUE) %>% 
   dplyr::select(Source, Target, Value)
+
+
 
  plot_net(datanode=nodes, dataedge=edges_corum) #Provo a plottare solo CORUM
 ```
 
-
-```{r STRING+CORUM}
- edges_all <-  edges %>% dplyr::bind_rows(edges_corum) %>% 
-   dplyr::mutate(color= if_else(Value==10, "red","green")) %>% as.data.frame() #Unisco CORUM a STRING
+```{r}
+edges_all <-  edges %>% dplyr::bind_rows(edges_corum) %>% 
+   dplyr::mutate(color= if_else(Value==10, "red","green")) %>% 
+  dplyr::mutate(Value= if_else(color=="red", 3, Value)) %>% 
+  as.data.frame() %>% 
+  dplyr::mutate(Value = round(Value, 0)) #Unisco CORUM a STRING
  
-
- nodes_corum <- edges_corum <-  complexes_query_genes_any %>%
+ 
+#Nodi solo di CORUM
+ nodes_corum <- complexes_query_genes_any %>%
    dplyr::select(components_genesymbols) %>% 
    tidyr::separate_rows(components_genesymbols, sep = "_") %>%
    dplyr::filter(components_genesymbols %in% query) %>% 
    dplyr::distinct(components_genesymbols, .keep_all = TRUE) %>% 
    dplyr::rename(name=components_genesymbols) %>% 
    merge(nodes) %>% 
-   dplyr::mutate(grp="corum")
+   dplyr::mutate(grp="corum") 
+ nodes_corum %>% pull(name)
    
- 
+#Tutti i nodi da rappresentare 
  nodes_all <- nodes %>% 
    dplyr::mutate(grp="string") %>% 
    dplyr::bind_rows(nodes_corum) %>% as.data.frame()
 
  
- #Dai parametri del grafico vado a modificare il colore degli edges
+#Uso i paramentri del grafico per specificare il colore degli edges
+p <-echarts4r::e_charts(animation = FALSE) %>%
+   echarts4r::e_graph(
+     roam = TRUE,
+     layout="force",
+     force = list(
+       initLayout = "circular",
+       repulsion = 100,
+       edgeLength = 30,
+       layoutAnimation = FALSE
+     ),
+     autoCurveness = TRUE,
+     emphasis = list(focus = "adjacency")
+   ) %>%
+   echarts4r::e_graph_nodes(
+     nodes = nodes,
+     names = name,
+     value = value,
+     size = size,
+     category = grp
+   ) %>%
+   echarts4r::e_graph_edges(
+     edges = edges_all,
+     source = Source,
+     target = Target,
+     value = Value,
+     size = Value
+   ) %>%
+   echarts4r::e_title("Network", "Up & Down Regulated") %>%
+   echarts4r::e_tooltip()
+
+#NETWORK CORUM+STRING
+p2 <- color_edge(list=p, edges=edges_all)
+p2
+
+#NETWORK SOLO STRING
+plot_net(datanode=nodes, dataedge=edges)
+```
+
+
+```{r STRING+CORUM}
+ edges_all <-  edges %>% dplyr::bind_rows(edges_corum) %>% 
+   dplyr::mutate(color= if_else(Value==10, "red","green")) %>% 
+  as.data.frame() #Unisco CORUM a STRING
+ 
+ 
+#Nodi solo di CORUM
+ nodes_corum <- complexes_query_genes_any %>%
+   dplyr::select(components_genesymbols) %>% 
+   tidyr::separate_rows(components_genesymbols, sep = "_") %>%
+   dplyr::filter(components_genesymbols %in% query) %>% 
+   dplyr::distinct(components_genesymbols, .keep_all = TRUE) %>% 
+   dplyr::rename(name=components_genesymbols) %>% 
+   merge(nodes) %>% 
+   dplyr::mutate(grp="corum") 
+
+   
+#Tutti i nodi da rappresentare 
+ nodes_all <- nodes %>% 
+   dplyr::mutate(grp="string") %>% 
+   dplyr::bind_rows(nodes_corum) %>% as.data.frame()
+
+ 
+#Uso i paramentri del grafico per specificare il colore degli edges
 p <-echarts4r::e_charts(animation = FALSE) %>%
    echarts4r::e_graph(
      roam = TRUE,
@@ -423,34 +498,16 @@ p <-echarts4r::e_charts(animation = FALSE) %>%
      value = Value,
      size = Value
    ) %>%
-   echarts4r::e_title("Network", "Up & Down Regulated") %>%
    echarts4r::e_tooltip()
  
+edges_all <- edges_all %>%
+  dplyr::mutate(Value = round(Value, 0)) 
+      # dplyr::filter(Source == "HNRNPL", Target == "HNRNPU", Value == 10) %>%
+      # pull(color)
 
-
-
+# p[["x"]][["opts"]][["series"]][[1]][["links"]][[1]][["lineStyle"]][["width"]] %>% as.numeric() %>% round(0)
 
 # p[["x"]][["opts"]][["series"]][[1]][["links"]][[1]][["lineStyle"]] <- list(width =p[["x"]][["opts"]][["series"]][[1]][["links"]][[1]][["lineStyle"]][["width"]], color = "red")
-
-
-
-n_edges <- nrow(edges_all)
-color <- edges_all %>% pull(color)
-
-
-all_opt <- p %>% purrr::pluck("x", "opts", "series") %>%
-  purrr::chuck(1) %>%
-  purrr::pluck("links") %>% View()
-
-all_links <- p %>% purrr::map(.x = 1:n_edges,
-  .f = ~ all_opt[[.x]])%>% 
-  purrr::chuck(1) %>%  purrr::pluck("")
-
-  list(width = all_links, color = color)
-
-
-  
-# color<- edges_all %>% dplyr::filter(Source==source, Target==target) %>% pull(color) ## se il filter non è una riga sola bisogna fare qualcosa
 
 color_edge <- function(list, edges) {
   n_edges <- nrow(edges)
@@ -459,21 +516,24 @@ color_edge <- function(list, edges) {
       list[["x"]][["opts"]][["series"]][[1]][["links"]][[i]]$source
     target <-
       list[["x"]][["opts"]][["series"]][[1]][["links"]][[i]]$target
+    width <-
+      list[["x"]][["opts"]][["series"]][[1]][["links"]][[i]][["lineStyle"]][["width"]]
+    val <- as.numeric(width) %>% round(0)
     color <-
-      edge %>% dplyr::filter(Source == source, Target == target) %>% pull(color)
+      edges %>% 
+      dplyr::filter(Source == source, Target == target, Value == val) %>%
+      pull(color)
     
     list[["x"]][["opts"]][["series"]][[1]][["links"]][[i]][["lineStyle"]] <-
       list(width = list[["x"]][["opts"]][["series"]][[1]][["links"]][[i]][["lineStyle"]][["width"]], color = color)
-    
   }
-  
   return(list)
 }
 
 tidyr::expand_grid(target = c("gene1", "gene2", "gene3"), source = c("gene1", "gene2", "gene3")) %>% 
   dplyr::filter(target != source)
 
-purrr::map(.x = 1:45, .f = ~ color_edge_single(list = p, edge = edges_all, index = .x))
+#purrr::map(.x = 1:45, .f = ~ color_edge_single(list = p, edge = edges_all, index = .x))
 
 color_edge_single <- function(list, edge, index) {
   
@@ -492,12 +552,12 @@ color_edge_single <- function(list, edge, index) {
 n_edges<- nrow(edges_all)
 color_edge_single(p, edges_all, 2)
 
-p2 <- color_edge(p, edges_all)
+
+p2 <- color_edge(list=p, edges=edges_all) 
 p2
   
 nodes <- nodes %>%
   dplyr::mutate(color = if_else(value>2, "red", "blue"))
-  View()
 ```
 
 ```{r}
@@ -519,7 +579,7 @@ b <- tidyr::expand_grid(Target = a, Source = a) %>%
 final_edge <- b %>% bind_rows(edges_corum)
 ```
 
-```{r}
+```{r Network ORA}
 go_data <- data.table::fread("ora_table.tsv")
 
 nodes_go <- go_data %>% 
@@ -578,4 +638,3 @@ edges_go <- go_data%>%
 
 
 ```
-

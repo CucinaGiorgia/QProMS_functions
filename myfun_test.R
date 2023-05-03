@@ -433,14 +433,14 @@ filter_nodes <- function(datanodes, data_edges){
 plot_net <- function(datanode, dataedge, animation=FALSE, layout="force"){
   p <- echarts4r::e_charts(animation=FALSE) %>% 
     echarts4r::e_graph(roam=TRUE, 
-                       force= list( initLayout = layout, 
+                       layout = layout,
+                       force= list( initLayout = "circular", 
                                     repulsion=100,
                                     edgeLength=30,
                                     layoutAnimation=animation),
                        itemStyle=list(opacity=0.65),
-                       lineStyle=list(curveness=0.2), 
-                       emphasis=list(focus="adjacency", 
-                                     lineStyle=list(width=10))) %>% 
+                       autoCurveness = TRUE,
+                       emphasis=list(focus="adjacency")) %>% 
     echarts4r::e_graph_nodes(nodes=datanode, names = name,  value=value, size=size, category=grp) %>% 
     echarts4r::e_graph_edges(edges=dataedge, source=Source, target=Target, value=Value, size = Value) %>%
     echarts4r::e_color(c("blue", "red")) %>% 
@@ -468,5 +468,28 @@ plot_all <- function(data, test, remove, score=0.4, animation=FALSE, layout="for
 
 ## Intact
 
+
+
+##CORUM EDGES COLOR
+color_edge <- function(list, edges) {
+  n_edges <- nrow(edges)
+  for (i in 1:n_edges) {
+    source <- 
+      list[["x"]][["opts"]][["series"]][[1]][["links"]][[i]]$source
+    target <-
+      list[["x"]][["opts"]][["series"]][[1]][["links"]][[i]]$target
+    width <-
+      list[["x"]][["opts"]][["series"]][[1]][["links"]][[i]][["lineStyle"]][["width"]]
+    val <- as.numeric(width) %>% round(0)
+    color <-
+      edges %>% 
+      dplyr::filter(Source == source, Target == target, Value == val) %>%
+      pull(color)
+    
+    list[["x"]][["opts"]][["series"]][[1]][["links"]][[i]][["lineStyle"]] <-
+      list(width = list[["x"]][["opts"]][["series"]][[1]][["links"]][[i]][["lineStyle"]][["width"]], color = color)
+  }
+  return(list)
+}
 
 
