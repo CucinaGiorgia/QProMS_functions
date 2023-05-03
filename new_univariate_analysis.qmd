@@ -531,7 +531,8 @@ nodes_go <- go_data %>%
   dplyr::distinct(name, .keep_all = TRUE) %>% 
   dplyr::mutate(size=dplyr::if_else(Description==name, value, 10)) %>% 
   dplyr::mutate(symbol=dplyr::if_else(Description==name, "diamond", "circle")) %>% 
-  dplyr::mutate(label=dplyr::if_else(Description==name, name, ""))
+  dplyr::mutate(label=dplyr::if_else(Description==name, name, "")) %>% 
+  dplyr::select(!Description)
 
 
 edges_go <- go_data%>% 
@@ -553,7 +554,7 @@ edges_go <- go_data%>%
      ),
      autoCurveness = TRUE,
      emphasis = list(focus = "adjacency",
-                     lineStyle = list(width = 10))
+                     lineStyle = list(width = 5))
    ) %>%
    echarts4r::e_graph_nodes(
      nodes = nodes_go,
