@@ -229,7 +229,7 @@ r6$stat_t_test(
 
 ## Volcao Plot
 
-```{r VOlcano}
+```{r Volcano}
 data <- r6$stat_table%>% 
   ggplot2::ggplot(aes(x=rev_vs_dmso_fold_change,
                       y=-log10(rev_vs_dmso_p_val),
@@ -577,6 +577,9 @@ b <- tidyr::expand_grid(Target = a, Source = a) %>%
   dplyr::mutate(Value = 10)
 
 final_edge <- b %>% bind_rows(edges_corum)
+
+p3 <- color_edge(list=p, final_edge) 
+p3
 ```
 
 ```{r Network ORA}
@@ -600,7 +603,7 @@ edges_go <- go_data%>%
   dplyr::select(Description, pvalue, p.adjust, qvalue, fold_change, geneID) %>% 
   tidyr::separate_rows(geneID, sep = "/") %>% 
     dplyr::select(source=Description, target= geneID, value=pvalue) %>% 
-  dplyr::mutate(size="1")
+  dplyr::mutate(size="10")
  
 
   echarts4r::e_charts() %>%
@@ -631,10 +634,7 @@ edges_go <- go_data%>%
      value = value,
      size = size
    ) %>%
-  #echarts4r::e_labels(nodes_go$label,font_size=4)%>%
+  #echarts4r::e_labels(show = TRUE, position = "right", formatter=nodes_go$label,font_size=4)%>%
    echarts4r::e_title("Network", "Gene Ontology") %>%
    echarts4r::e_tooltip()
-  
-
-
 ```
