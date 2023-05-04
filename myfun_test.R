@@ -386,7 +386,8 @@ nodes <- function(data, nodesize=5){
     dplyr::rename(value =p_adj, size = p_val, grp = regulation) %>% 
     dplyr::mutate(value = -log10(value)) %>% 
     dplyr::mutate(size = -log10(size)*nodesize) %>% 
-    dplyr::mutate(grp = as.factor(grp))
+    dplyr::mutate(grp = as.factor(grp)) %>% 
+    tidyr::as_tibble()
   
   
   return(data)
@@ -474,22 +475,29 @@ plot_all <- function(data, test, remove, score=0.4, animation=FALSE, layout="for
 color_edge <- function(list, edges) {
   n_edges <- nrow(edges)
   for (i in 1:n_edges) {
-    source <- 
-      list[["x"]][["opts"]][["series"]][[1]][["links"]][[i]]$source
+    source <-
+      list %>%
+      purrr::pluck("x", "opts", "series", 1, "links", i, "source")
+    
     target <-
-      list[["x"]][["opts"]][["series"]][[1]][["links"]][[i]]$target
+      list %>% purrr::pluck("x", "opts", "series", 1, "links", i, "target")
+    
     width <-
-      list[["x"]][["opts"]][["series"]][[1]][["links"]][[i]][["lineStyle"]][["width"]]
+      list %>% purrr::pluck("x", "opts", "series", 1, "links", i, "lineStyle", "width")
+    
     val <- as.numeric(width) %>% round(0)
+    
     color <-
-      edges %>% 
+      edges %>%
       dplyr::filter(Source == source, Target == target, Value == val) %>%
       pull(color)
     
-    list[["x"]][["opts"]][["series"]][[1]][["links"]][[i]][["lineStyle"]] <-
-      list(width = list[["x"]][["opts"]][["series"]][[1]][["links"]][[i]][["lineStyle"]][["width"]], color = color)
+    list <-
+      purrr::modify_in(list,
+                       list("x", "opts", "series", 1, "links", i, "lineStyle"),
+                       \(x) c(x, c(color = color)))
   }
   return(list)
+  
 }
-
 

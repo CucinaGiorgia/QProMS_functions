@@ -269,7 +269,7 @@ up_down <- sig_up_down(data=sig, remove="Down")
 ```{r Create Nodes & Edges}
 nodes <- nodes(data=up_down)
 
-edges <- edges(data= nodes, score=0.4)
+edges <- edges(data= nodes, score=0.7)
 ```
 
 ### Filter Nodes
@@ -362,7 +362,7 @@ edges_corum <-  complexes_query_genes_any %>%
   tidyr::separate_rows(components_genesymbols, sep = "_") %>%
   dplyr::filter(components_genesymbols %in% query) %>%
   dplyr::mutate(unique_names = paste0(name, "__", components_genesymbols)) %>%
-  dplyr::distinct(unique_names, .keep_all = TRUE) %>%
+  dplyr::distinct(unique_names, .keep_all = TRUE) %>% 
   dplyr::select(name, components_genesymbols) %>%
   get_dupes(name) %>%
   dplyr::filter(dupe_count == 2) %>%
@@ -378,8 +378,6 @@ edges_corum <-  complexes_query_genes_any %>%
   dplyr::select(Source, Target, Value)
 
 
-
- plot_net(datanode=nodes, dataedge=edges_corum) #Provo a plottare solo CORUM
 ```
 
 ```{r}
@@ -391,20 +389,21 @@ edges_all <-  edges %>% dplyr::bind_rows(edges_corum) %>%
  
  
 #Nodi solo di CORUM
- nodes_corum <- complexes_query_genes_any %>%
-   dplyr::select(components_genesymbols) %>% 
-   tidyr::separate_rows(components_genesymbols, sep = "_") %>%
-   dplyr::filter(components_genesymbols %in% query) %>% 
-   dplyr::distinct(components_genesymbols, .keep_all = TRUE) %>% 
-   dplyr::rename(name=components_genesymbols) %>% 
-   merge(nodes) %>% 
-   dplyr::mutate(grp="corum") 
- nodes_corum %>% pull(name)
-   
+ nodes_corum <- edges_corum %>%
+   dplyr::mutate(name=paste0(Source, "_", Target)) %>%  
+   dplyr::select(name, Value) %>% 
+   dplyr::rename(value=Value) %>% 
+   tidyr::separate_rows(name, sep = "_") %>%
+   dplyr::filter(name %in% query) %>% 
+   dplyr::distinct(name, .keep_all = TRUE) %>% 
+   dplyr::mutate(grp="corum") %>% 
+   dplyr::left_join(nodes %>% dplyr::select(name, size),by = "name")
+
 #Tutti i nodi da rappresentare 
  nodes_all <- nodes %>% 
    dplyr::mutate(grp="string") %>% 
-   dplyr::bind_rows(nodes_corum) %>% as.data.frame()
+   dplyr::bind_rows(nodes_corum) %>% 
+   dplyr::distinct(name, .keep_all = TRUE)
 
  
 #Uso i paramentri del grafico per specificare il colore degli edges
@@ -414,15 +413,15 @@ p <-echarts4r::e_charts(animation = FALSE) %>%
      layout="force",
      force = list(
        initLayout = "circular",
-       repulsion = 100,
-       edgeLength = 30,
+       repulsion = 500,
+       edgeLength = 50,
        layoutAnimation = FALSE
      ),
      autoCurveness = TRUE,
      emphasis = list(focus = "adjacency")
    ) %>%
    echarts4r::e_graph_nodes(
-     nodes = nodes,
+     nodes = nodes_all,
      names = name,
      value = value,
      size = size,
@@ -441,6 +440,7 @@ p <-echarts4r::e_charts(animation = FALSE) %>%
 #NETWORK CORUM+STRING
 p2 <- color_edge(list=p, edges=edges_all)
 p2
+
 
 #NETWORK SOLO STRING
 plot_net(datanode=nodes, dataedge=edges)
@@ -505,57 +505,49 @@ edges_all <- edges_all %>%
       # dplyr::filter(Source == "HNRNPL", Target == "HNRNPU", Value == 10) %>%
       # pull(color)
 
-# p[["x"]][["opts"]][["series"]][[1]][["links"]][[1]][["lineStyle"]][["width"]] %>% as.numeric() %>% round(0)
 
-# p[["x"]][["opts"]][["series"]][[1]][["links"]][[1]][["lineStyle"]] <- list(width =p[["x"]][["opts"]][["series"]][[1]][["links"]][[1]][["lineStyle"]][["width"]], color = "red")
 
 color_edge <- function(list, edges) {
   n_edges <- nrow(edges)
   for (i in 1:n_edges) {
-    source <- 
-      list[["x"]][["opts"]][["series"]][[1]][["links"]][[i]]$source
+    source <-
+      list %>%
+      purrr::pluck("x", "opts", "series", 1, "links", i, "source")
+    
     target <-
-      list[["x"]][["opts"]][["series"]][[1]][["links"]][[i]]$target
+      list %>% purrr::pluck("x", "opts", "series", 1, "links", i, "target")
+    
     width <-
-      list[["x"]][["opts"]][["series"]][[1]][["links"]][[i]][["lineStyle"]][["width"]]
+      list %>% purrr::pluck("x", "opts", "series", 1, "links", i, "lineStyle", "width")
+    
     val <- as.numeric(width) %>% round(0)
+    
     color <-
-      edges %>% 
+      edges %>%
       dplyr::filter(Source == source, Target == target, Value == val) %>%
       pull(color)
     
-    list[["x"]][["opts"]][["series"]][[1]][["links"]][[i]][["lineStyle"]] <-
-      list(width = list[["x"]][["opts"]][["series"]][[1]][["links"]][[i]][["lineStyle"]][["width"]], color = color)
+    list <-
+      purrr::modify_in(list,
+                       list("x", "opts", "series", 1, "links", i, "lineStyle"),
+                       \(x) c(x, c(color = color)))
   }
   return(list)
+  
 }
 
+ 
 tidyr::expand_grid(target = c("gene1", "gene2", "gene3"), source = c("gene1", "gene2", "gene3")) %>% 
   dplyr::filter(target != source)
 
-#purrr::map(.x = 1:45, .f = ~ color_edge_single(list = p, edge = edges_all, index = .x))
-
-color_edge_single <- function(list, edge, index) {
-  
-  source<- list[["x"]][["opts"]][["series"]][[1]][["links"]][[index]]$source
-  target<- list[["x"]][["opts"]][["series"]][[1]][["links"]][[index]]$target
-  
-  
-  list[["x"]][["opts"]][["series"]][[1]][["links"]][[index]][["lineStyle"]] <- 
-    list(width =list[["x"]][["opts"]][["series"]][[1]][["links"]][[index]][["lineStyle"]][["width"]],
-         color = color)
-   
-  return(list)
-}
-
 
 n_edges<- nrow(edges_all)
-color_edge_single(p, edges_all, 2)
-
 
 p2 <- color_edge(list=p, edges=edges_all) 
 p2
   
+
+
 nodes <- nodes %>%
   dplyr::mutate(color = if_else(value>2, "red", "blue"))
 ```
@@ -568,7 +560,7 @@ a <- complexes_query_genes_any %>%
   dplyr::mutate(unique_names = paste0(name, "__", components_genesymbols)) %>%
   dplyr::distinct(unique_names, .keep_all = TRUE) %>%
   dplyr::select(name, components_genesymbols) %>%
-  get_dupes(name) %>%
+  get_dupes(name) %>% 
   dplyr::filter(dupe_count > 2) %>% 
   pull(components_genesymbols) 
 
