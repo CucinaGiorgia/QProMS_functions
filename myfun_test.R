@@ -374,7 +374,7 @@ sig_up_down <- function(data, remove){
 }
 
 
-#NODES
+#NODES STRING
 nodes <- function(data, nodesize=5){
   data <- data %>% 
     dplyr::pull(gene_names) %>% 
@@ -393,7 +393,7 @@ nodes <- function(data, nodesize=5){
   return(data)
 }
 
-#EDGES
+#EDGES STRING
 edges <- function(data, score=0.4, edgesize=5){
   data <- data %>% 
     dplyr::pull(name) %>%
@@ -415,6 +415,19 @@ edges <- function(data, score=0.4, edgesize=5){
   
   return(data)
 }
+
+
+#COMPLEXES CORUM
+complexes_corum <- function(data = up_down) {
+  all_complexes <-
+    import_omnipath_complexes(resources = "CORUM") #Tutte le interactions di CORUM
+  query <- data$gene_names #Dataset di partenza
+  my_complexes <- unique(get_complex_genes(all_complexes, query,
+                                           total_match = FALSE))
+}
+
+#NODES CORUM
+
 
 #FILTER_NODES_DEGREE_ZERO
 filter_nodes <- function(datanodes, data_edges){
@@ -468,7 +481,37 @@ plot_all <- function(data, test, remove, score=0.4, animation=FALSE, layout="for
 ### DATABASE SEARCH
 
 ## Intact
+intact_edge <- function(gene_vector) {
+  intact_list <- rba_reactome_interactors_psicquic(genes, resource = "IntAct", details = TRUE)
+  
+  all_interactions <- purrr::map(.x = 1:length(gene_vector),
+                                 .f = ~ intact_list$entities[[.x]])
+  
+  res <- purrr::map(.x = all_interactions, .f = ~ keep_only_if_present(.x)) %>%
+    purrr::compact() %>%
+    purrr::reduce(bind_rows) %>%
+    dplyr::select(source, alias, score, accURL, evidences) %>%
+    tidyr::drop_na() %>%
+    dplyr::filter(source != alias)
+  
+  return(res)
+}
 
+
+#Keep only nodes present in my dataset
+keep_only_if_present <- function(lista) {
+  n_interaction <- lista$count
+  name_source <- lista$acc
+  
+  res <-
+    purrr::map(
+      .x = 1:n_interaction,
+      .f = ~ lista$interactors[[.x]] %>% purrr::list_modify(source = name_source)
+    ) %>%
+    purrr::keep(~ all(.x$alias %in% pull(nodes, name)))
+  
+  return(res)
+}
 
 
 ##CORUM EDGES COLOR
