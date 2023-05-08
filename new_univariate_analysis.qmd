@@ -49,12 +49,12 @@ r6 <- QProMS$new()
 ## Loading raw data
 
 ```{r loading-data-1}
-raw_data <- loading_data(file_path = here::here("proteinGroups.txt"))
+raw_data <- loading_data(file_path = here::here("proteinGroups_APEX_P62.txt"))
 ```
 
 ```{r loading-data-2}
 r6$loading_data(
-  input_path = "proteinGroups.txt",
+  input_path = "proteinGroups_APEX_P62.txt",
   input_type = "max_quant"
 )
 ```
@@ -62,19 +62,19 @@ r6$loading_data(
 ## Make Experimental Design
 
 ```{r make-expdesign-1}
-exp_des <- exp_design (data=raw_data, pattern_interest = "lfq_intensity_bc_")
+exp_des <- exp_design (data=raw_data, pattern_interest = "lfq_intensity_")
 ```
 
 ```{r make-expdesign-2}
 r6$make_expdesign(
-  start_with = "lfq_intensity_bc_"
+  start_with = "lfq_intensity_"
 )
 ```
 
 ## Data pre-processing
 
 ```{r Data preprocessing 1}
-data_pre <- pre_process (data=raw_data, pattern_interest =  "lfq_intensity_bc_")
+data_pre <- pre_process (data=raw_data, pattern_interest =  "lfq_intensity_")
 ```
 
 ```{r Data preprocessing 2}
@@ -126,7 +126,7 @@ r6$imputation()
 ## Color palette
 
 ```{r Palette}
-n_of_color <- max(exp_des %>% dplyr::count(replicate) %>% dplyr::pull(n))
+n_of_color <- max(exp_des %>% dplyr::count(replicate) %>% dplyr::pull(n)) 
 color_palette <- viridis::viridis(n = n_of_color , direction = -1, end = 0.70, begin = 0.30)
 
 ```
@@ -218,7 +218,7 @@ r6$plot_pca(view_3d = FALSE)
 
 ```{r Statistics t-test}
 r6$define_tests()
-tests <- c("rev_vs_dmso", "nw_vs_dmso")
+tests <- c("apexonly_vs_apexp62")
 r6$stat_t_test(
   data = r6$imputed_data,
   test = tests,
@@ -253,7 +253,7 @@ r6$plot_volcano(test = tests, highlights_names = c("VCAN", "STAT3"))
 ## Significant Data
 
 ```{r Dataset significat}
-sig <- significant(data=r6$stat_table, test = "nw_vs_dmso")
+sig <- significant(data=r6$stat_table, test = "apexonly_vs_apexp62")
 ```
 
 ### Only Up-regulated
@@ -289,7 +289,7 @@ plot_net(datanode=nodes, dataedge=edges)
 ```{r All from nodes to network}
 plot_all (
   data = r6$stat_table,
-  test = "nw_vs_dmso",
+  test = "apexonly_vs_apexp62",
   remove = "Down",
   score = 0.4,
   animation = FALSE,
@@ -380,80 +380,13 @@ edges_corum <-  complexes_query_genes_any %>%
 
 ```
 
-```{r}
-# edges_all <-  edges %>% dplyr::bind_rows(edges_corum) %>% 
-#    dplyr::mutate(color= if_else(Value==10, "red","green")) %>% 
-#   dplyr::mutate(Value= if_else(color=="red", 3, Value)) %>% 
-#   as.data.frame() %>% 
-#   dplyr::mutate(Value = round(Value, 0)) #Unisco CORUM a STRING
- 
-#Nodi solo di CORUM
- nodes_corum <- edges_corum %>%
-   dplyr::mutate(name=paste0(Source, "_", Target)) %>%  
-   dplyr::select(name, Value) %>% 
-   dplyr::rename(value=Value) %>% 
-   tidyr::separate_rows(name, sep = "_") %>%
-   dplyr::filter(name %in% query) %>% 
-   dplyr::distinct(name, .keep_all = TRUE) %>% 
-   dplyr::mutate(grp="corum") %>% 
-   dplyr::left_join(nodes %>% dplyr::select(name, size),by = "name")
-
-#Tutti i nodi da rappresentare 
- nodes_all <- nodes %>% 
-   dplyr::mutate(grp="string") %>% 
-   dplyr::bind_rows(nodes_corum) %>% 
-   dplyr::distinct(name, .keep_all = TRUE)
-
- 
-#Uso i paramentri del grafico per specificare il colore degli edges
-p <-echarts4r::e_charts(animation = FALSE) %>%
-   echarts4r::e_graph(
-     roam = TRUE,
-     layout="force",
-     force = list(
-       initLayout = "circular",
-       repulsion = 500,
-       edgeLength = 50,
-       layoutAnimation = FALSE
-     ),
-     autoCurveness = TRUE,
-     emphasis = list(focus = "adjacency")
-   ) %>%
-   echarts4r::e_graph_nodes(
-     nodes = nodes_all,
-     names = name,
-     value = value,
-     size = size,
-     category = grp
-   ) %>%
-   echarts4r::e_graph_edges(
-     edges = edges_all,
-     source = Source,
-     target = Target,
-     value = Value,
-     size = Value
-   ) %>%
-   echarts4r::e_title("Network", "Up & Down Regulated") %>%
-   echarts4r::e_tooltip()
-p
-#NETWORK CORUM+STRING (only 1-1 interactions)
-p2 <- color_edge(list=p, edges=edges_all)
-p2
-
-```
-
 ```{r STRING+CORUM}
- # edges_all <-  edges %>% dplyr::bind_rows(edges_corum) %>% 
- #   dplyr::mutate(color= if_else(Value==10, "red","green")) %>% 
- #  as.data.frame() #Unisco CORUM a STRING
- # 
- 
 #Nodi solo di CORUM
  nodes_corum <- complexes_query_genes_any %>%
    dplyr::select(components_genesymbols) %>% 
    tidyr::separate_rows(components_genesymbols, sep = "_") %>%
    dplyr::filter(components_genesymbols %in% query) %>% 
-   dplyr::distinct(components_genesymbols, .keep_all = TRUE) %>% 
+   dplyr::distinct(components_genesymbols, .keep_all = TRUE) %>% #Tolgo nomi duplicati
    dplyr::rename(name=components_genesymbols) %>% 
    merge(nodes) %>% 
    dplyr::mutate(grp="corum") 
@@ -463,6 +396,62 @@ p2
  nodes_all <- nodes %>% 
    dplyr::mutate(grp="string") %>% 
    dplyr::bind_rows(nodes_corum) %>% as.data.frame()
+
+```
+
+```{r CORUM complexes}
+#Create a df with all the interactions from corum and their complex
+edges_corum_complexes <- complexes_query_genes_any %>%
+  dplyr::select(name, components_genesymbols) %>%
+  tidyr::separate_rows(components_genesymbols, sep = "_") %>%
+  dplyr::filter(components_genesymbols %in% query) %>%
+  dplyr::rename(Source = components_genesymbols) %>%
+  get_dupes(Source) %>%
+  dplyr::group_by(name) %>%
+  dplyr::mutate(count = dplyr::n()) %>%
+  dplyr::ungroup() %>%
+  dplyr::group_by(Source) %>%
+  dplyr::filter(count == max(count)) %>%
+  dplyr::distinct(Source, .keep_all = TRUE) %>% 
+  dplyr::ungroup() %>% 
+  dplyr::mutate(complex=name) %>% 
+  dplyr::group_by(name) %>% 
+  dplyr::right_join(edges_corum) %>%
+  dplyr::select(Source, Target, Value, name)
+
+
+#Set the color palette. Each complex will have a different color
+n_of_color <- edges_corum_complexes %>% dplyr::group_by(name) %>% dplyr::group_keys() %>% nrow()
+color_palette <- viridis::viridis(n = n_of_color , direction = -1, option = "H")
+
+
+rowcolorpalette <- length(color_palette)
+
+
+color_complex <- edges_corum_complexes %>% 
+  dplyr::group_map(~.x) 
+
+
+color_complex <-  purrr::map(
+  .x = 1:rowcolorpalette,
+  .f =  ~ dplyr::mutate(color_complex[[.x]], color = color_palette[.x])
+) %>%
+  purrr::reduce(bind_rows)
+
+
+
+#Final edge df, all the color and complex info
+final_edges_corum <- color_complex %>% 
+  dplyr::right_join(edges_corum)
+
+
+
+#All the edges 
+edges_all <-  edges %>% dplyr::bind_rows(final_edges_corum) %>% 
+   dplyr::mutate(color= if_else(Value==10, color,"grey")) %>%
+  dplyr::mutate(Value= if_else(Value==10, 3, Value)) %>% 
+  as.data.frame() %>% 
+  dplyr::mutate(Value = round(Value, 0)) #Unisco CORUM a STRING
 
  
 #Uso i paramentri del grafico per specificare il colore degli edges
@@ -493,57 +482,24 @@ p <-echarts4r::e_charts(animation = FALSE) %>%
      value = Value,
      size = Value
    ) %>%
+  echarts4r::e_labels() %>% 
    echarts4r::e_tooltip()
- 
-edges_all <- edges_all %>%
-  dplyr::mutate(Value = round(Value, 0)) 
-      # dplyr::filter(Source == "HNRNPL", Target == "HNRNPU", Value == 10) %>%
-      # pull(color)
+
+p2 <- color_edge(list=p, edges=edges_all) 
+p2  
+
+
+```
 
 
 
-color_edge <- function(list, edges) {
-  n_edges <- nrow(edges)
-  for (i in 1:n_edges) {
-    source <-
-      list %>%
-      purrr::pluck("x", "opts", "series", 1, "links", i, "source")
-    
-    target <-
-      list %>% purrr::pluck("x", "opts", "series", 1, "links", i, "target")
-    
-    width <-
-      list %>% purrr::pluck("x", "opts", "series", 1, "links", i, "lineStyle", "width")
-    
-    val <- as.numeric(width) %>% round(0)
-    
-    color <-
-      edges %>%
-      dplyr::filter(Source == source, Target == target, Value == val) %>%
-      pull(color)
-    
-    list <-
-      purrr::modify_in(list,
-                       list("x", "opts", "series", 1, "links", i, "lineStyle"),
-                       \(x) c(x, c(color = color)))
-  }
-  return(list)
-  
-}
-
- 
+```{r}
 tidyr::expand_grid(target = c("gene1", "gene2", "gene3"), source = c("gene1", "gene2", "gene3")) %>% 
   dplyr::filter(target != source)
 
 
-n_edges<- nrow(edges_all)
 
-p2 <- color_edge(list=p, edges=edges_all) 
-p2
-  
-```
 
-```{r}
 a <- complexes_query_genes_any %>%
   dplyr::select(name, components_genesymbols) %>%
   tidyr::separate_rows(components_genesymbols, sep = "_") %>%
@@ -622,79 +578,3 @@ edges_go <- go_data%>%
    echarts4r::e_tooltip()
 ```
 
-```{r CORUM complexes}
-#Create a df with all the interactions from corum and their complex
-edges_corum_complexes <- complexes_query_genes_any %>%
-  dplyr::select(name, components_genesymbols) %>%
-  tidyr::separate_rows(components_genesymbols, sep = "_") %>%
-  dplyr::filter(components_genesymbols %in% query) %>%
-  dplyr::rename(Source = components_genesymbols) %>%
-  get_dupes(Source) %>%
-  dplyr::group_by(name) %>%
-  dplyr::mutate(count = dplyr::n()) %>%
-  dplyr::ungroup() %>%
-  dplyr::group_by(Source) %>%
-  dplyr::filter(count == max(count)) %>%
-  dplyr::distinct(Source, .keep_all = TRUE) %>% 
-  dplyr::ungroup() %>% 
-  dplyr::mutate(complex=name) %>% 
-  dplyr::group_by(name)  %>% 
-  dplyr::group_map(~.x) 
-  # dplyr::right_join(edges_corum) %>%
-  # dplyr::select(Source, Target, Value, name)
-
-
-
-
-#Set the color palette. Each complex will have a different color
-n_of_color <- edges_corum_complexes %>% dplyr::group_by(name) %>% dplyr::group_keys() %>% nrow()
-color_palette <- viridis::viridis(n = n_of_color , direction = -1, option = "H")
-
-
-rowcolorpalette <- length(color_palette)
-
-
-color_complex <- edges_corum_complexes %>% 
-  dplyr::group_map(~.x) %>% 
-  purrr::map(
-  .x = 1:rowcolorpalette,
-  .f =  ~ dplyr::mutate(edges_corum_complexes[[.x]], color = color_palette[.x])
-) %>%
-  purrr::reduce(bind_rows)
-
-
-
-#Final edge df, all the color and complex info
-final_edges_corum <- color_complex %>%  
-  dplyr::right_join(edges_corum, by="Source") %>% 
-  dplyr::select(Source, Target, Value, name, color) 
-
-
-
-#All the edges 
-edges_all <-  edges %>% dplyr::bind_rows(final_edges_corum) %>% 
-   dplyr::mutate(color= if_else(Value==10, color,"grey")) %>%
-  dplyr::mutate(Value= if_else(Value==10, 3, Value)) %>% 
-  as.data.frame() %>% 
-  dplyr::mutate(Value = round(Value, 0)) #Unisco CORUM a STRING
-
-
-
-
-echarts4r::e_charts(animation=FALSE) %>% 
-    echarts4r::e_graph(roam=TRUE, 
-                       layout = "force",
-                       force= list( initLayout = "circular", 
-                                    repulsion=800,
-                                    edgeLength=50,
-                                    layoutAnimation=FALSE),
-                       itemStyle=list(opacity=0.65),
-                       autoCurveness = TRUE,
-                       emphasis=list(focus="adjacency")) %>% 
-    echarts4r::e_graph_nodes(nodes=nodes, names = name,  value=value, size=size) %>% 
-    echarts4r::e_graph_edges(edges=edges_all, source=Source, target=Target, value=Value, size = Value) %>%
-    echarts4r::e_labels(nodes$name, font_size=4)%>%
-    echarts4r:: e_title("Network", "Up & Down Regulated") %>%
-    echarts4r::e_tooltip()
-
-```
