@@ -323,71 +323,27 @@ library(OmnipathR)
 #Solo complessi CORUM
 my_complexes <- complexes_corum(data = up_down)
 
+#Solo nodi CORUM (data sono i complessi di corum)
+nodes_corum <- nodes_corum(data = my_complexes, nodesize = 5)
 
-#Solo nodi CORUM (NON FUNZIONA)
-nodes_corum <- function(data){
-  data <- data %>% 
-    dplyr::select(components_genesymbols) %>% 
-   tidyr::separate_rows(components_genesymbols, sep = "_") %>%
-   dplyr::filter(components_genesymbols %in% query) %>% 
-   dplyr::distinct(components_genesymbols, .keep_all = TRUE) %>% #Tolgo nomi duplicati
-   dplyr::rename(name=components_genesymbols) %>% 
-   merge(nodes) %>% 
-   dplyr::mutate(grp="corum") 
-}
+#Tutti i nodi (STRING+CORUM)
+nodes_all <- all_nodes(nodes_string = nodes, nodes_corum = nodes_corum)
 
-nodes_corum <- nodes_corum(data = my_complexes)
-```
+#Create a df with all the interactions from corum and their complex
+corum_edges <- edges_corum(data=my_complexes, data_filtered = up_down, data_edges = edges)
 
-```{r STRING+CORUM}
-#Nodi solo di CORUM
- nodes_corum <- my_complexes %>%
-   dplyr::select(components_genesymbols) %>% 
-   tidyr::separate_rows(components_genesymbols, sep = "_") %>%
-   dplyr::filter(components_genesymbols %in% query) %>%
-   dplyr::distinct(components_genesymbols, .keep_all = TRUE) %>% #Tolgo nomi duplicati 
-   dplyr::rename(name=components_genesymbols) %>% 
-   merge(nodes) %>%
-   dplyr::mutate(grp="corum")
-
-   
-#Tutti i nodi da rappresentare 
- nodes_all <- nodes %>% 
-   dplyr::mutate(grp="string") %>% 
-   dplyr::bind_rows(nodes_corum) %>% as.data.frame()
 
 ```
+
 
 ```{r CORUM complexes}
-#Create a df with all the interactions from corum and their complex
-edges_corum_complexes <- complexes_query_genes_any %>%
-  dplyr::select(name, components_genesymbols) %>%
-  tidyr::separate_rows(components_genesymbols, sep = "_") %>%
-  dplyr::filter(components_genesymbols %in% query) %>%
-  dplyr::rename(Source = components_genesymbols) %>%
-  get_dupes(Source) %>%
-  dplyr::group_by(name) %>%
-  dplyr::mutate(count = dplyr::n()) %>%
-  dplyr::ungroup() %>%
-  dplyr::group_by(Source) %>%
-  dplyr::filter(count == max(count)) %>%
-  dplyr::distinct(Source, .keep_all = TRUE) %>% 
-  dplyr::ungroup() %>% 
-  dplyr::mutate(complex=name) %>% 
-  dplyr::group_by(name) %>% 
-  dplyr::right_join(edges_corum) %>%
-  dplyr::select(Source, Target, Value, name)
-
-
 #Set the color palette. Each complex will have a different color
-n_of_color <- edges_corum_complexes %>% dplyr::group_by(name) %>% dplyr::group_keys() %>% nrow()
+n_of_color <- corum_edges %>% dplyr::group_by(name) %>% dplyr::group_keys() %>% nrow()
 color_palette <- viridis::viridis(n = n_of_color , direction = -1, option = "H")
-
-
 rowcolorpalette <- length(color_palette)
 
 
-color_complex <- edges_corum_complexes %>% 
+color_complex <- corum_edges %>% 
   dplyr::group_map(~.x) 
 
 
@@ -402,7 +358,6 @@ color_complex <-  purrr::map(
 #Final edge df, all the color and complex info
 final_edges_corum <- color_complex %>% 
   dplyr::right_join(edges_corum_complexes)
-
 
 
 #All the edges 
@@ -449,8 +404,6 @@ p2
 
 
 ```
-
-
 
 ```{r}
 tidyr::expand_grid(target = c("gene1", "gene2", "gene3"), source = c("gene1", "gene2", "gene3")) %>% 

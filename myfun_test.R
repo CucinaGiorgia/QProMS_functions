@@ -389,7 +389,6 @@ nodes <- function(data, nodesize=5){
     dplyr::mutate(grp = as.factor(grp)) %>% 
     tidyr::as_tibble()
   
-  
   return(data)
 }
 
@@ -411,7 +410,7 @@ edges <- function(data, score=0.4, edgesize=5){
     dplyr::filter(tot_score>score) %>% #Filtro sullo score
     dplyr::mutate(tot_score = tot_score*edgesize) %>% 
     dplyr::select(FROM,TO, tot_score) %>% 
-    dplyr::rename(Source=FROM, Target=TO, Value=tot_score)
+    dplyr::rename(source=FROM, target=TO, value=tot_score)
   
   return(data)
 }
@@ -424,24 +423,88 @@ complexes_corum <- function(data = up_down) {
   query <- data$gene_names #Dataset di partenza
   my_complexes <- unique(get_complex_genes(all_complexes, query,
                                            total_match = FALSE))
+  return(my_complexes)
 }
 
 #NODES CORUM
-
+nodes_corum <- function(data, nodesize){
+  data <- data %>% 
+    dplyr::select(components_genesymbols) %>% 
+    tidyr::separate_rows(components_genesymbols, sep = "_") %>%
+    dplyr::filter(components_genesymbols %in% query) %>% 
+    dplyr::distinct(components_genesymbols, .keep_all = TRUE) %>% #Tolgo nomi duplicati
+    dplyr::rename(name=components_genesymbols) %>% 
+    dplyr::left_join(up_down, by=c("name"="gene_names")) %>%
+    dplyr::rename(value = p_adj, size = p_val, grp = regulation) %>% 
+    dplyr::mutate(grp = "corum") %>%
+    dplyr::mutate(value = -log10(value)) %>%
+    dplyr::mutate(size = -log10(size) * nodesize) %>%  
+    dplyr::select(name, value, size, grp) %>% 
+    dplyr::distinct(name, .keep_all = TRUE) 
+  
+  return(data)
+}
 
 #FILTER_NODES_DEGREE_ZERO
 filter_nodes <- function(datanodes, data_edges){
   data <- datanodes %>% 
     left_join(data_edges, by=c("name"="Source")) %>% 
     left_join(data_edges, by=c("name"="Target")) %>% 
-    dplyr::mutate(Source = dplyr::if_else(is.na(Source), 0, 1)) %>% 
-    dplyr::mutate(Target = dplyr::if_else(is.na(Target), 0, 1)) %>% 
-    dplyr::mutate(Exists = Source+Target) %>% 
+    dplyr::mutate(source = dplyr::if_else(is.na(source), 0, 1)) %>% 
+    dplyr::mutate(target = dplyr::if_else(is.na(target), 0, 1)) %>% 
+    dplyr::mutate(Exists = source+target) %>% 
     dplyr::filter(!Exists== "0") %>% 
     dplyr::select(name, size, value, grp) %>% 
     dplyr::distinct(name, .keep_all = TRUE)
+  
   return(data)
 }
+
+##TUTTI I NODI DA RAPPRESENTARE
+all_nodes <- function(nodes_string, nodes_corum){
+  data <- nodes_string %>% 
+    dplyr::mutate(grp="string") %>% 
+    dplyr::bind_rows(nodes_corum) %>% as.data.frame() 
+  
+  return(data)
+}
+
+##EDGES CORUM
+edges_corum <- function(data_filtered, data, data_edges) {
+  query <- data_filtered$gene_names #Dataset di partenza
+  
+  data <- data %>%
+    dplyr::select(name, components_genesymbols) %>%
+    tidyr::separate_rows(components_genesymbols, sep = "_") %>%
+    dplyr::filter(components_genesymbols %in% query) %>%
+    dplyr::rename(source = components_genesymbols) %>%
+    get_dupes(source) %>%
+    dplyr::group_by(name) %>%
+    dplyr::mutate(count = dplyr::n()) %>%
+    dplyr::ungroup() %>%
+    dplyr::group_by(source) %>%
+    dplyr::filter(count == max(count)) %>%
+    dplyr::distinct(source, .keep_all = TRUE) %>%
+    dplyr::ungroup() %>%
+    dplyr::mutate(complex = name) %>%
+    dplyr::group_by(name) %>%
+    dplyr::right_join(data_edges) %>%
+    dplyr::select(source, target, value, name)
+  
+  return(data)
+  
+}
+
+
+
+
+
+
+
+
+
+
+
 
 #PLOT_NETWORK
 plot_net <- function(datanode, dataedge, animation=FALSE, layout="force"){
@@ -456,7 +519,7 @@ plot_net <- function(datanode, dataedge, animation=FALSE, layout="force"){
                        autoCurveness = TRUE,
                        emphasis=list(focus="adjacency")) %>% 
     echarts4r::e_graph_nodes(nodes=datanode, names = name,  value=value, size=size, category=grp) %>% 
-    echarts4r::e_graph_edges(edges=dataedge, source=Source, target=Target, value=Value, size = Value) %>%
+    echarts4r::e_graph_edges(edges=dataedge, source=source, target=target, value=value, size = value) %>%
     echarts4r::e_color(c("blue", "red")) %>% 
     echarts4r::e_labels(datanode$name, font_size=4)%>%
     echarts4r:: e_title("Network", "Up & Down Regulated") %>%
@@ -532,7 +595,7 @@ color_edge <- function(list, edges) {
     
     color <-
       edges %>%
-      dplyr::filter(Source == source, Target == target, Value == val) %>%
+      dplyr::filter(source == source, target == target, value == val) %>%
       pull(color)
     
     list <-
