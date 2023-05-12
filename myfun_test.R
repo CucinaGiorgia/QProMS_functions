@@ -374,7 +374,8 @@ sig_up_down <- function(data, remove){
 }
 
 
-#NODES STRING
+#NODES STRING (diventa inutile perchè quando andiamo a cercare gli edges la ricerca viene già fatta tramite gene_name.
+#Di conseguenza basta modificare la sig table per ottenere la lista di nodi)
 nodes <- function(data, nodesize=5){
   data <- data %>% 
     dplyr::pull(gene_names) %>% 
@@ -403,6 +404,7 @@ edges <- function(data, score=0.4, edgesize=5){
     dplyr::mutate(totscore = escore+dscore) %>% 
     dplyr::filter(!totscore== "0") %>%
     dplyr::select(FROM,TO, escore, dscore) %>%
+    #se facessi tidyr::unite() potrei unire due colonne in una unica e poi fare il distinct
     dplyr::mutate(Score1 = (escore-0.041)*(1-0.041)) %>% 
     dplyr::mutate(Score2 = (dscore-0.041)*(1-0.041)) %>% 
     dplyr::mutate(Score_combin = 1-(1-Score1)*(1-Score2)) %>% 
@@ -445,11 +447,14 @@ nodes_corum <- function(data, nodesize){
   return(data)
 }
 
+#Quando voglio far capire dove mettere il termine della pipe precedente, mi basta mettere il .
+#Altrimenti me lo mette come primo termine
+
 #FILTER_NODES_DEGREE_ZERO
 filter_nodes <- function(datanodes, data_edges){
   data <- datanodes %>% 
-    left_join(data_edges, by=c("name"="Source")) %>% 
-    left_join(data_edges, by=c("name"="Target")) %>% 
+    left_join(data_edges, by=c("name"="source")) %>% 
+    left_join(data_edges, by=c("name"="target")) %>% 
     dplyr::mutate(source = dplyr::if_else(is.na(source), 0, 1)) %>% 
     dplyr::mutate(target = dplyr::if_else(is.na(target), 0, 1)) %>% 
     dplyr::mutate(Exists = source+target) %>% 
@@ -478,7 +483,8 @@ edges_corum <- function(data_filtered, data, data_edges) {
     tidyr::separate_rows(components_genesymbols, sep = "_") %>%
     dplyr::filter(components_genesymbols %in% query) %>%
     dplyr::rename(source = components_genesymbols) %>%
-    get_dupes(source) %>%
+    unique() %>%  #In questo modo seleziono solo una riga
+    get_dupes(name) %>%
     dplyr::group_by(name) %>%
     dplyr::mutate(count = dplyr::n()) %>%
     dplyr::ungroup() %>%
@@ -489,20 +495,12 @@ edges_corum <- function(data_filtered, data, data_edges) {
     dplyr::mutate(complex = name) %>%
     dplyr::group_by(name) %>%
     dplyr::right_join(data_edges) %>%
-    dplyr::select(source, target, value, name)
+    dplyr::select(source, target, value, name) %>% 
+    dplyr::mutate(value=10)
   
   return(data)
   
 }
-
-
-
-
-
-
-
-
-
 
 
 
@@ -515,12 +513,11 @@ plot_net <- function(datanode, dataedge, animation=FALSE, layout="force"){
                                     repulsion=800,
                                     edgeLength=50,
                                     layoutAnimation=animation),
-                       itemStyle=list(opacity=0.65),
+                       itemStyle=list(opacity=0.9),
                        autoCurveness = TRUE,
                        emphasis=list(focus="adjacency")) %>% 
     echarts4r::e_graph_nodes(nodes=datanode, names = name,  value=value, size=size, category=grp) %>% 
     echarts4r::e_graph_edges(edges=dataedge, source=source, target=target, value=value, size = value) %>%
-    echarts4r::e_color(c("blue", "red")) %>% 
     echarts4r::e_labels(datanode$name, font_size=4)%>%
     echarts4r:: e_title("Network", "Up & Down Regulated") %>%
     echarts4r::e_tooltip()
@@ -540,8 +537,38 @@ plot_all <- function(data, test, remove, score=0.4, animation=FALSE, layout="for
   return(p)
 }
 
+##CORUM EDGES COLOR
+color_edge <- function(list, edges) {
+  n_edges <- nrow(edges)
+  for (i in 1:n_edges) {
+    source <-
+      list %>%
+      purrr::pluck("x", "opts", "series", 1, "links", i, "source")
+    
+    target <-
+      list %>% purrr::pluck("x", "opts", "series", 1, "links", i, "target")
+    
+    width <-
+      list %>% purrr::pluck("x", "opts", "series", 1, "links", i, "lineStyle", "width")
+    
+    val <- as.numeric(width) %>% round(0)
+    
+    color <-
+      edges %>%
+      dplyr::filter(source == source, target == target, value == val) %>%
+      pull(color)
+    
+    list <-
+      purrr::modify_in(list,
+                       list("x", "opts", "series", 1, "links", i, "lineStyle"),
+                       \(x) c(x, c(color = color)))
+  }
+  return(list)
+  
+}
 
-### DATABASE SEARCH
+
+### OTHER DATABASES SEARCH
 
 ## Intact
 intact_edge <- function(gene_vector) {
@@ -574,36 +601,5 @@ keep_only_if_present <- function(lista) {
     purrr::keep(~ all(.x$alias %in% pull(nodes, name)))
   
   return(res)
-}
-
-
-##CORUM EDGES COLOR
-color_edge <- function(list, edges) {
-  n_edges <- nrow(edges)
-  for (i in 1:n_edges) {
-    source <-
-      list %>%
-      purrr::pluck("x", "opts", "series", 1, "links", i, "source")
-    
-    target <-
-      list %>% purrr::pluck("x", "opts", "series", 1, "links", i, "target")
-    
-    width <-
-      list %>% purrr::pluck("x", "opts", "series", 1, "links", i, "lineStyle", "width")
-    
-    val <- as.numeric(width) %>% round(0)
-    
-    color <-
-      edges %>%
-      dplyr::filter(source == source, target == target, value == val) %>%
-      pull(color)
-    
-    list <-
-      purrr::modify_in(list,
-                       list("x", "opts", "series", 1, "links", i, "lineStyle"),
-                       \(x) c(x, c(color = color)))
-  }
-  return(list)
-  
 }
 

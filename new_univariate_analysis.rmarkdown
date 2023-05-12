@@ -27,7 +27,6 @@ library(gt)
 library(visNetwork)
 library(ggplot2)
 library(vsn)
-#Ho rimosso in pacchetto corrmorant perchè dava errore su Mac
 library(ComplexHeatmap)
 library(STRINGdb)
 library(igraph)
@@ -53,12 +52,12 @@ r6 <- QProMS$new()
 
 
 ```{r loading-data-1}
-raw_data <- loading_data(file_path = here::here("proteinGroups.txt"))
+raw_data <- loading_data(file_path = here::here("proteinGroups_APEX_P62.txt"))
 ```
 
 ```{r loading-data-2}
 r6$loading_data(
-  input_path = "proteinGroups.txt",
+  input_path = "proteinGroups_APEX_P62.txt",
   input_type = "max_quant"
 )
 ```
@@ -68,12 +67,12 @@ r6$loading_data(
 
 
 ```{r make-expdesign-1}
-exp_des <- exp_design (data=raw_data, pattern_interest = "lfq_intensity_bc_")
+exp_des <- exp_design (data=raw_data, pattern_interest = "lfq_intensity_")
 ```
 
 ```{r make-expdesign-2}
 r6$make_expdesign(
-  start_with = "lfq_intensity_bc_"
+  start_with = "lfq_intensity_"
 )
 ```
 
@@ -82,7 +81,7 @@ r6$make_expdesign(
 
 
 ```{r Data preprocessing 1}
-data_pre <- pre_process (data=raw_data, pattern_interest =  "lfq_intensity_bc_")
+data_pre <- pre_process (data=raw_data, pattern_interest =  "lfq_intensity_")
 ```
 
 ```{r Data preprocessing 2}
@@ -142,7 +141,7 @@ r6$imputation()
 
 
 ```{r Palette}
-n_of_color <- max(exp_des %>% dplyr::count(replicate) %>% dplyr::pull(n))
+n_of_color <- max(exp_des %>% dplyr::count(replicate) %>% dplyr::pull(n)) 
 color_palette <- viridis::viridis(n = n_of_color , direction = -1, end = 0.70, begin = 0.30)
 
 ```
@@ -156,7 +155,7 @@ barplot_count(data = data_filt)
 ```
 
 ```{r protein-counts}
-r6$plot_protein_counts() 
+r6$plot_protein_counts()
 ```
 
 ```{r Protein Coverage}
@@ -197,7 +196,7 @@ r6$plot_missing_data()
 ```
 
 ```{r Plot imputation}
-den_imput(data=data_filt)    
+den_imput(data=data_filt)
 ```
 
 ```{r plot-imputation}
@@ -217,16 +216,16 @@ r6$plot_correlation_interactive()
 
 
 ```{r PCA 1}
-pca <- prcomp(t(mat(data= data_imput)), center = TRUE, scale = TRUE) 
-      
+pca <- prcomp(t(mat(data= data_imput)), center = TRUE, scale = TRUE)
+
 ## create a data.frame for the first 3 PC
 pca_table <- data.frame(label = rownames(pca$x),
                         x = pca$x[, 1],
                         y = pca$x[, 2],
-                        z = pca$x[, 3]) %>% 
-  dplyr::left_join(exp_des, by = "label") %>% 
+                        z = pca$x[, 3]) %>%
+  dplyr::left_join(exp_des, by = "label") %>%
   group_by(condition)
- 
+
 
 pca_plot(data=pca_table)
 
@@ -242,7 +241,7 @@ r6$plot_pca(view_3d = FALSE)
 
 ```{r Statistics t-test}
 r6$define_tests()
-tests <- c("rev_vs_dmso", "nw_vs_dmso")
+tests <- c("apexonly_vs_apexp62")
 r6$stat_t_test(
   data = r6$imputed_data,
   test = tests,
@@ -256,7 +255,7 @@ r6$stat_t_test(
 
 
 ```{r Volcano}
-data <- r6$stat_table%>% 
+data <- r6$stat_table%>%
   ggplot2::ggplot(aes(x=rev_vs_dmso_fold_change,
                       y=-log10(rev_vs_dmso_p_val),
                       color=dplyr::case_when(rev_vs_dmso_fold_change > 1 & -log10(rev_vs_dmso_p_val) > 0.5 ~ "red",
@@ -281,7 +280,7 @@ r6$plot_volcano(test = tests, highlights_names = c("VCAN", "STAT3"))
 
 
 ```{r Dataset significat}
-sig <- significant(data=r6$stat_table, test = "nw_vs_dmso")
+sig <- significant(data=r6$stat_table, test = "apexonly_vs_apexp62")
 ```
 
 
@@ -289,7 +288,7 @@ sig <- significant(data=r6$stat_table, test = "nw_vs_dmso")
 
 
 ```{r Filter Significant Up}
-up_down <- sig_up_down(data=sig, remove="Down")
+up_down <- sig_up_down(data=sig, remove="") 
 ```
 
 
@@ -301,7 +300,7 @@ up_down <- sig_up_down(data=sig, remove="Down")
 ```{r Create Nodes & Edges}
 nodes <- nodes(data=up_down)
 
-edges <- edges(data= nodes, score=0.4)
+edges <- edges(data= nodes, score=0.7)
 ```
 
 
@@ -327,7 +326,7 @@ plot_net(datanode=nodes, dataedge=edges)
 ```{r All from nodes to network}
 plot_all (
   data = r6$stat_table,
-  test = "nw_vs_dmso",
+  test = "apexonly_vs_apexp62",
   remove = "Down",
   score = 0.4,
   animation = FALSE,
@@ -349,36 +348,6 @@ genes <- sig %>%
   dplyr::filter(regulation == "down") %>%
   pull(gene_names)
 
-intact_edge <- function(gene_vector) {
- intact_list <- rba_reactome_interactors_psicquic(genes, resource = "IntAct", details = TRUE)
-
-  all_interactions <- purrr::map(.x = 1:length(gene_vector),
-                                 .f = ~ intact_list$entities[[.x]])
-
-  res <- purrr::map(.x = all_interactions, .f = ~ keep_only_if_present(.x)) %>%
-    purrr::compact() %>%
-    purrr::reduce(bind_rows) %>%
-    dplyr::select(source, alias, score, accURL, evidences) %>%
-    tidyr::drop_na() %>%
-    dplyr::filter(source != alias)
-
-  return(res)
-}
-
-keep_only_if_present <- function(lista) {
-  n_interaction <- lista$count
-  name_source <- lista$acc
-
-  res <-
-    purrr::map(
-      .x = 1:n_interaction,
-      .f = ~ lista$interactors[[.x]] %>% purrr::list_modify(source = name_source)
-    ) %>%
-    purrr::keep(~ all(.x$alias %in% pull(nodes, name)))
-
-  return(res)
-}
-
 genes <- nodes %>% pull(name)
 
 intact_edge(genes)
@@ -386,129 +355,54 @@ intact_edge(genes)
 ```
 
 
-
 ## CORUM
+
 
 ```{r CORUM}
 library(OmnipathR)
 
-complexes <- import_omnipath_complexes(resources = "CORUM") #Tutte le interactions di CORUM
-query <- nodes$name #Dataset
+#Solo complessi CORUM
+my_complexes <- complexes_corum(data = up_down)
 
-complexes_query_genes_any <-
-  unique(get_complex_genes(complexes, query,
-                           total_match = FALSE)) #Tutte le interazioni che includono il mio dataset
+#Solo nodi CORUM (data sono i complessi di corum)
+nodes_corum <- nodes_corum(data = my_complexes, query=nodes$name, nodesize = 5)
 
-edges_corum <-  complexes_query_genes_any %>%
-  dplyr::select(name, components_genesymbols) %>%
-  tidyr::separate_rows(components_genesymbols, sep = "_") %>%
-  dplyr::filter(components_genesymbols %in% query) %>%
-  dplyr::mutate(unique_names = paste0(name, "__", components_genesymbols)) %>%
-  dplyr::distinct(unique_names, .keep_all = TRUE) %>% 
-  dplyr::select(name, components_genesymbols) %>%
-  get_dupes(name) %>%
-  dplyr::filter(dupe_count == 2) %>%
-  tibble::rowid_to_column() %>%
-  dplyr::mutate(nodi = if_else(gtools::odd(rowid), "nodo", "target")) %>%
-  dplyr::select(name, nodi, components_genesymbols) %>%
-  tidyr::pivot_wider(name, values_from = components_genesymbols, names_from = nodi) %>%
-  dplyr::mutate(Value = 10) %>%
-  dplyr::rename(Source = nodo, Target = target) %>%
-  dplyr::select(Source, Target, Value) %>% 
-  dplyr::mutate(names = paste0(Source, "__", Target)) %>%
-  dplyr::distinct(names, .keep_all = TRUE) %>% 
-  dplyr::select(Source, Target, Value)
+#Tutti i nodi (STRING+CORUM)
+nodes_all <- all_nodes(nodes_string = nodes, nodes_corum = nodes_corum)
 
-
-
- plot_net(datanode=nodes, dataedge=edges_corum) #Provo a plottare solo CORUM
+#Create a df with all the interactions from corum and their complex
+corum_edges <- edges_corum(data=my_complexes, data_filtered = up_down, data_edges = edges)
 ```
 
-```{r}
-edges_all <-  edges %>% dplyr::bind_rows(edges_corum) %>% 
-   dplyr::mutate(color= if_else(Value==10, "red","green")) %>% 
-  dplyr::mutate(Value= if_else(color=="red", 3, Value)) %>% 
+```{r CORUM complexes}
+#Set the color palette. Each complex will have a different color
+n_of_color <- corum_edges %>% dplyr::group_by(name) %>% dplyr::group_keys() %>% nrow()
+color_palette <- viridis::viridis(n = n_of_color , direction = -1, option = "H")
+rowcolorpalette <- length(color_palette)
+
+
+color_complex <- corum_edges %>% 
+  dplyr::group_map(~.x) 
+
+
+color_complex <-  purrr::map(
+  .x = 1:rowcolorpalette,
+  .f =  ~ dplyr::mutate(color_complex[[.x]], color = color_palette[.x])
+) %>%
+  purrr::reduce(bind_rows)
+
+
+#Final edge df, all the color and complex info
+final_edges_corum <- color_complex %>% 
+  dplyr::right_join(corum_edges)
+
+
+#All the edges 
+edges_all <-  edges %>% dplyr::bind_rows(final_edges_corum) %>% 
+   dplyr::mutate(color= if_else(value==10, color,"grey")) %>%
+  dplyr::mutate(value= if_else(value==10, 3, value)) %>% 
   as.data.frame() %>% 
-  dplyr::mutate(Value = round(Value, 0)) #Unisco CORUM a STRING
- 
- 
-#Nodi solo di CORUM
- nodes_corum <- complexes_query_genes_any %>%
-   dplyr::select(components_genesymbols) %>% 
-   tidyr::separate_rows(components_genesymbols, sep = "_") %>%
-   dplyr::filter(components_genesymbols %in% query) %>% 
-   dplyr::distinct(components_genesymbols, .keep_all = TRUE) %>% 
-   dplyr::rename(name=components_genesymbols) %>% 
-   merge(nodes) %>% 
-   dplyr::mutate(grp="corum") 
- nodes_corum %>% pull(name)
-   
-#Tutti i nodi da rappresentare 
- nodes_all <- nodes %>% 
-   dplyr::mutate(grp="string") %>% 
-   dplyr::bind_rows(nodes_corum) %>% as.data.frame()
-
- 
-#Uso i paramentri del grafico per specificare il colore degli edges
-p <-echarts4r::e_charts(animation = FALSE) %>%
-   echarts4r::e_graph(
-     roam = TRUE,
-     layout="force",
-     force = list(
-       initLayout = "circular",
-       repulsion = 100,
-       edgeLength = 30,
-       layoutAnimation = FALSE
-     ),
-     autoCurveness = TRUE,
-     emphasis = list(focus = "adjacency")
-   ) %>%
-   echarts4r::e_graph_nodes(
-     nodes = nodes,
-     names = name,
-     value = value,
-     size = size,
-     category = grp
-   ) %>%
-   echarts4r::e_graph_edges(
-     edges = edges_all,
-     source = Source,
-     target = Target,
-     value = Value,
-     size = Value
-   ) %>%
-   echarts4r::e_title("Network", "Up & Down Regulated") %>%
-   echarts4r::e_tooltip()
-
-#NETWORK CORUM+STRING
-p2 <- color_edge(list=p, edges=edges_all)
-p2
-
-#NETWORK SOLO STRING
-plot_net(datanode=nodes, dataedge=edges)
-```
-
-```{r STRING+CORUM}
- edges_all <-  edges %>% dplyr::bind_rows(edges_corum) %>% 
-   dplyr::mutate(color= if_else(Value==10, "red","green")) %>% 
-  as.data.frame() #Unisco CORUM a STRING
- 
- 
-#Nodi solo di CORUM
- nodes_corum <- complexes_query_genes_any %>%
-   dplyr::select(components_genesymbols) %>% 
-   tidyr::separate_rows(components_genesymbols, sep = "_") %>%
-   dplyr::filter(components_genesymbols %in% query) %>% 
-   dplyr::distinct(components_genesymbols, .keep_all = TRUE) %>% 
-   dplyr::rename(name=components_genesymbols) %>% 
-   merge(nodes) %>% 
-   dplyr::mutate(grp="corum") 
-
-   
-#Tutti i nodi da rappresentare 
- nodes_all <- nodes %>% 
-   dplyr::mutate(grp="string") %>% 
-   dplyr::bind_rows(nodes_corum) %>% as.data.frame()
+  dplyr::mutate(value = round(value, 0)) #Unisco CORUM a STRING
 
  
 #Uso i paramentri del grafico per specificare il colore degli edges
@@ -526,7 +420,7 @@ p <-echarts4r::e_charts(animation = FALSE) %>%
                      lineStyle = list(width = 10))
    ) %>%
    echarts4r::e_graph_nodes(
-     nodes = nodes,
+     nodes = nodes_all,
      names = name,
      value = value,
      size = size,
@@ -534,85 +428,87 @@ p <-echarts4r::e_charts(animation = FALSE) %>%
    ) %>%
    echarts4r::e_graph_edges(
      edges = edges_all,
-     source = Source,
-     target = Target,
-     value = Value,
-     size = Value
+     source = source,
+     target = target,
+     value = value,
+     size = value
    ) %>%
+  echarts4r::e_labels() %>% 
    echarts4r::e_tooltip()
- 
-edges_all <- edges_all %>%
-  dplyr::mutate(Value = round(Value, 0)) 
-      # dplyr::filter(Source == "HNRNPL", Target == "HNRNPU", Value == 10) %>%
-      # pull(color)
-
-# p[["x"]][["opts"]][["series"]][[1]][["links"]][[1]][["lineStyle"]][["width"]] %>% as.numeric() %>% round(0)
-
-# p[["x"]][["opts"]][["series"]][[1]][["links"]][[1]][["lineStyle"]] <- list(width =p[["x"]][["opts"]][["series"]][[1]][["links"]][[1]][["lineStyle"]][["width"]], color = "red")
-
-
-
-color_edge <- function(list, edges) {
-  n_edges <- nrow(edges)
-  for (i in 1:n_edges) {
-    source <- 
-      list %>% 
-      purrr::pluck("x")[["x"]][["opts"]][["series"]][[1]][["links"]][[i]]$source
-    target <-
-      list[["x"]][["opts"]][["series"]][[1]][["links"]][[i]]$target
-    width <-
-      list[["x"]][["opts"]][["series"]][[1]][["links"]][[i]][["lineStyle"]][["width"]]
-    val <- as.numeric(width) %>% round(0)
-    color <-
-      edges %>% 
-      dplyr::filter(Source == source, Target == target, Value == val) %>%
-      pull(color)
-    
-    list[["x"]][["opts"]][["series"]][[1]][["links"]][[i]][["lineStyle"]] <-
-      list(width = list[["x"]][["opts"]][["series"]][[1]][["links"]][[i]][["lineStyle"]][["width"]], color = color)
-  }
-  return(list)
-}
-
-tidyr::expand_grid(target = c("gene1", "gene2", "gene3"), source = c("gene1", "gene2", "gene3")) %>% 
-  dplyr::filter(target != source)
-
-#purrr::map(.x = 1:45, .f = ~ color_edge_single(list = p, edge = edges_all, index = .x))
-
-color_edge_single <- function(list, edge, index) {
-  
-  source<- list[["x"]][["opts"]][["series"]][[1]][["links"]][[index]]$source
-  target<- list[["x"]][["opts"]][["series"]][[1]][["links"]][[index]]$target
-  
-  
-  list[["x"]][["opts"]][["series"]][[1]][["links"]][[index]][["lineStyle"]] <- 
-    list(width =list[["x"]][["opts"]][["series"]][[1]][["links"]][[index]][["lineStyle"]][["width"]],
-         color = color)
-   
-  return(list)
-}
-
-
-n_edges<- nrow(edges_all)
-color_edge_single(p, edges_all, 2)
 
 
 p2 <- color_edge(list=p, edges=edges_all) 
-p2
-  
-nodes <- nodes %>%
-  dplyr::mutate(color = if_else(value>2, "red", "blue"))
+p2  
 ```
 
 ```{r}
-a <- complexes_query_genes_any %>%
+color_nodes <- function(list, nodes) {
+  n_nodes <- nrow(nodes)
+  for (i in 1:n_nodes) {
+    category <-
+      list %>%
+      purrr::pluck("x", "opts", "series", 1, "data", i, "category")
+
+    list <-
+      purrr::modify_in(list,
+                       list("x", "opts", "series", 1, "data", i,"category"),
+                       \(x) c(x, c(itemStyle= list(borderColor = list(if_else(category=="Up", "red", "blue"))))))
+  }
+  return(list)
+  
+}
+
+p <-echarts4r::e_charts(animation = FALSE) %>%
+   echarts4r::e_graph(
+     roam = TRUE,
+     force = list(
+       initLayout = "force",
+       repulsion = 100,
+       edgeLength = 30,
+       layoutAnimation = FALSE
+     ),
+    itemStyle= list(borderWidth=2, borderColor="borderColor"),
+     autoCurveness = TRUE,
+     emphasis = list(focus = "adjacency",
+                     lineStyle = list(width = 10))
+   ) %>%
+   echarts4r::e_graph_nodes(
+     nodes = nodes,
+     names = name,
+     value = value,
+     size = size,
+     category = grp,
+   ) %>%
+   echarts4r::e_graph_edges(
+     edges = edges,
+     source = source,
+     target = target,
+     value = value,
+     size = value
+   ) %>%
+  echarts4r::e_labels() %>% 
+   echarts4r::e_tooltip()
+
+p5 <- color_nodes(list = p, nodes = nodes)
+
+p5
+```
+
+```{r}
+tidyr::expand_grid(target = c("gene1", "gene2", "gene3"), source = c("gene1", "gene2", "gene3")) %>% 
+  dplyr::filter(target != source)
+
+
+
+
+a <- my_complexes %>%
   dplyr::select(name, components_genesymbols) %>%
   tidyr::separate_rows(components_genesymbols, sep = "_") %>%
   dplyr::filter(components_genesymbols %in% query) %>%
   dplyr::mutate(unique_names = paste0(name, "__", components_genesymbols)) %>%
   dplyr::distinct(unique_names, .keep_all = TRUE) %>%
   dplyr::select(name, components_genesymbols) %>%
-  get_dupes(name) %>%
+  get_dupes(name) %>% 
   dplyr::filter(dupe_count > 2) %>% 
   pull(components_genesymbols) 
 
@@ -622,24 +518,29 @@ b <- tidyr::expand_grid(Target = a, Source = a) %>%
 
 final_edge <- b %>% bind_rows(edges_corum)
 
-p3 <- color_edge(list=p, final_edge) 
+p3 <- color_edge(list=p, edges=final_edge) 
 p3
 ```
 
 ```{r Network ORA}
-go_data <- data.table::fread("ora_table.tsv")
+go_data <- data.table::fread("ora_table.tsv") %>% 
+  slice_head(n=10) %>% 
+  tibble::rowid_to_column()
 
 nodes_go <- go_data %>% 
   tidyr::separate_rows(geneID, sep = "/") %>% 
   dplyr::filter(group=="nw_vs_dmso_down") %>% 
   dplyr::mutate(name=paste0(Description, "_", geneID)) %>% 
   dplyr::select(Description, name, pvalue, p.adjust, qvalue, value=fold_change, grp=group) %>% 
-    tidyr::separate_rows(name, sep = "_") %>% 
+  tidyr::separate_rows(name, sep = "_") %>% 
   dplyr::distinct(name, .keep_all = TRUE) %>% 
   dplyr::mutate(size=dplyr::if_else(Description==name, value, 10)) %>% 
   dplyr::mutate(symbol=dplyr::if_else(Description==name, "diamond", "circle")) %>% 
   dplyr::mutate(label=dplyr::if_else(Description==name, name, "")) %>% 
-  dplyr::select(!Description)
+  dplyr::select(!Description) %>% 
+  dplyr::left_join(go_data %>% dplyr::select(Description, rowid), by=c("name"="Description")) %>% 
+  dplyr::arrange(rowid) %>% 
+  dplyr::select(-rowid)
 
 
 edges_go <- go_data%>% 
@@ -661,7 +562,7 @@ edges_go <- go_data%>%
      ),
      autoCurveness = TRUE,
      emphasis = list(focus = "adjacency",
-                     lineStyle = list(width = 5))
+                     lineStyle = list(width = 3))
    ) %>%
    echarts4r::e_graph_nodes(
      nodes = nodes_go,
@@ -678,7 +579,7 @@ edges_go <- go_data%>%
      value = value,
      size = size
    ) %>%
-  #echarts4r::e_labels(show = TRUE, position = "right", formatter=nodes_go$label,font_size=4)%>%
+  #echarts4r::e_labels(nodes$label, formatter={"b"},font_size=4)%>%
    echarts4r::e_title("Network", "Gene Ontology") %>%
    echarts4r::e_tooltip()
 ```
