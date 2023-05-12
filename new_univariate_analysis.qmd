@@ -34,6 +34,7 @@ library(networkD3)
 library(httr)
 library(jsonlite)
 library(rbioapi)
+library(purrr)
 
 source(file = here::here("myfun_test.R"))
 source(file = here::here("theme_ggplot_test.R"))
@@ -252,7 +253,7 @@ r6$plot_volcano(test = tests, highlights_names = c("VCAN", "STAT3"))
 ## Significant Data
 
 ```{r Dataset significat}
-sig <- significant(data=r6$stat_table, test = "apexonly_vs_apexp62")
+sig <- significant(data=r6$stat_table, test = "tc1d22b_vs_ev")
 ```
 
 ### Only Up-regulated
@@ -288,7 +289,7 @@ plot_net(datanode=nodes, dataedge=edges)
 ```{r All from nodes to network}
 plot_all (
   data = r6$stat_table,
-  test = "apexonly_vs_apexp62",
+  test = "tc1d22b_vs_ev",
   remove = "Down",
   score = 0.4,
   animation = FALSE,
@@ -347,6 +348,9 @@ nodes_all <- all_nodes(nodes_string = nodes, nodes_corum = nodes_corum)
 
 #Create a df with all the interactions from corum and their complex
 corum_edges <- edges_corum(data=my_complexes, data_filtered = up_down, data_edges = edges)
+
+
+
 ```
 
 
@@ -603,15 +607,17 @@ make_edges <- function(source, names) {
             unique() %>% 
             dplyr::rename(complex = name) 
             
-          final_table<- edges_corum_table %>% 
-              dplyr::mutate(comb_name=paste0(target, "_", source)) %>%
-  group_by(comb_name) %>% 
-  dplyr::left_join(edges_corum_table) %>%
-  dplyr::summarize(complex=paste(complex, collapse=";"),
-                   score=sum(score)) %>%
-  tidyr::separate_wider_delim(cols = comb_name, delim = "_", names = c( "source", "target")) %>% 
-  dplyr::mutate(color = "#4daf4a")
-            # dplyr::mutate(score = 1, color = "#4daf4a")
+          final_table <- edges_corum_table %>%
+            dplyr::mutate(comb_name = paste0(target, "_", source)) %>%
+            group_by(comb_name) %>%
+            dplyr::left_join(edges_corum_table) %>%
+            dplyr::summarize(complex = paste(complex, collapse = ";"),
+                             score = sum(score)) %>%
+            tidyr::separate_wider_delim(cols = comb_name,
+                                        delim = "_",
+                                        names = c("source", "target")) %>%
+            dplyr::mutate(color = "#4daf4a")
+          # dplyr::mutate(score = 1, color = "#4daf4a")
           
         } else {
           edges_corum_table <- NULL
@@ -793,43 +799,6 @@ edges_go <- go_data%>%
    echarts4r::e_tooltip()
 ```
 
-```{r}
-
-      
-raw_corum_table <-
-  get_complex_genes(import_omnipath_complexes(resources = "CORUM"),
-                    nodes_name,
-                    total_match = FALSE) %>% 
-  unique() %>%
-  dplyr::select(name, components_genesymbols) %>%
-  tidyr::separate_rows(components_genesymbols, sep = "_") %>%
-  dplyr::filter(components_genesymbols %in% nodes_name) %>%
-  unique() %>%
-  get_dupes(name)
-        
-        if (nrow(raw_corum_table) != 0) {
-          
-          expand_nodes <- raw_corum_table %>%
-            dplyr::group_by(name) %>%
-            dplyr::group_map( ~ dplyr::pull(.x, components_genesymbols))
-          
-          edges_corum_table <-
-            map(.x = expand_nodes, .f = ~ as.data.frame(t(combn(.x, 2)))) %>%
-            reduce(dplyr::bind_rows) %>%
-            dplyr::rename(target = V1,  source = V2) %>%
-            dplyr::left_join(raw_corum_table, by = c("source" = "components_genesymbols")) %>%
-            dplyr::select(-dupe_count) %>%
-            dplyr::rename(complex = name) %>%
-            unique() %>% 
-            dplyr::mutate(score = 1, color = "#4daf4a")
-          
-        } else {
-          edges_corum_table <- NULL
-        }
-        
-```
-
-
 
 ```{r}
 library(purrr)
@@ -850,9 +819,74 @@ edges_comb_complex <- edges_corum_table %>%
   tidyr::separate_wider_delim(cols = comb_name, delim = "_", names = c( "source", "target")) %>% 
   dplyr::mutate(color = "#4daf4a") %>% 
   View()
-
-
-
-
 ```
 
+
+###PROTEIN STRUCTURES
+```{r Structures}
+#Define dataset
+library(protti)
+
+uniprot_id <- nodes_all %>%
+  dplyr::pull(name) %>%
+  clusterProfiler::bitr(fromType = "SYMBOL",
+                        toType = "UNIPROT",
+                        OrgDb = "org.Hs.eg.db") %>%
+  dplyr::distinct(SYMBOL, .keep_all = TRUE)
+
+uniprot_information <-
+  fetch_uniprot(
+    uniprot_ids = uniprot_id$UNIPROT,
+    columns = c("gene_names", "sequence", "xref_pdb")
+  ) %>% 
+tidyr::drop_na() %>%
+  dplyr::mutate(pdb_id = stringr::str_extract(xref_pdb, "[^;]*")) %>% View()
+  dplyr::select(pdb_id)
+
+
+#PROVA
+library(r3dmol)
+
+prova <- 
+  r3dmol() %>%
+  m_add_model(data = m_fetch_pdb("2HF6"), format = "pdb") %>%
+  m_set_style(style = c(m_style_cartoon(), m_style_stick())) %>%
+  m_zoom_to() %>% 
+    # Set style of structures
+    m_set_style(style = m_style_cartoon(color = "#00AFBB")) %>%
+    # Style the alpha helix
+  m_set_style(
+    sel = m_sel(ss = "h"), # Style alpha helix
+    style = m_style_cartoon(color = "#636efa")
+  ) %>% 
+    m_set_style(
+    sel = m_sel(ss = "s"), # Style beta sheet
+    style = m_style_cartoon(color = "#FC4E07")
+  ) 
+
+prova
+
+r3dmol(
+  id = "4zyo",
+  elementId = "pdb_4zyo"
+) %>%
+  # Add model to scene
+  m_add_model(data = prova, format = "pdb") %>% 
+  # Zoom to encompass the whole scene
+  m_zoom_to() %>%
+  # Set style of structures
+  m_set_style(style = m_style_cartoon(color = "#00cc96")) %>%
+  # Set style of specific selection (selecting by secondary)
+  m_set_style(
+    sel = m_sel(ss = "s"),
+    style = m_style_cartoon(color = "#636efa", arrows = TRUE)
+  ) %>%
+  # Style the alpha helix
+  m_set_style(
+    sel = m_sel(ss = "h"), # Style alpha helix
+    style = m_style_cartoon(color = "#ff7f0e")
+  ) %>%
+  # Rotate the scene by given angle on given axis
+  m_rotate(angle = 90, axis = "y")
+
+```
