@@ -35,6 +35,7 @@ library(httr)
 library(jsonlite)
 library(rbioapi)
 library(purrr)
+library(r3dmol)
 
 source(file = here::here("myfun_test.R"))
 source(file = here::here("theme_ggplot_test.R"))
@@ -823,147 +824,50 @@ edges_comb_complex <- edges_corum_table %>%
 
 
 ###PROTEIN STRUCTURES
-```{r Structures}
-#Define dataset
-library(protti)
-
-uniprot_id <- raw_data %>%
-  dplyr::pull(name) %>%
-  clusterProfiler::bitr(fromType = "SYMBOL",
-                        toType = "UNIPROT",
-                        OrgDb = "org.Hs.eg.db") %>%
-  dplyr::distinct(SYMBOL, .keep_all = TRUE)
-
-
-raw_data_final <- raw_data %>% 
+```{r From gene_names to PDB_id}
+pdb_id <- function(data){
+  prot_id <- data %>% 
   dplyr::filter(!reverse == "+", !potential_contaminant == "+", !only_identified_by_site == "+") %>% 
-  dplyr::mutate(protein_i_ds= stringr::str_extract(protein_i_ds, "[^;]*")) %>% View()
+  dplyr::mutate(protein_i_ds= stringr::str_extract(protein_i_ds, "[^;]*")) %>% 
   pull(protein_i_ds) 
   
-  
-
-
 uniprot_information <-
   fetch_uniprot(
-    uniprot_ids = raw_data_final,
+    uniprot_ids = prot_id,
     columns = c("xref_pdb")
   ) %>%  
 tidyr::drop_na("xref_pdb") %>%
-  dplyr::mutate(pdb_id = stringr::str_extract(xref_pdb, "[^;]*")) %>% View()
+  dplyr::mutate(pdb_id = stringr::str_extract(xref_pdb, "[^;]*")) %>% 
+  dplyr::inner_join(data, by=c("accession"="protein_i_ds")) %>% 
+    dplyr::select(uniprot_id=accession, pdb_id, gene_names)  
 
+return(uniprot_information)
+}
 
+```
+
+```{r Structures}
 #PROVA
-library(r3dmol)
+structure <-
+  function(pdb_id,
+           color_structure = "#00AFBB",
+           color_helix = "#636efa",
+           color_sheet = "#FC4E07") {
+    p <- r3dmol() %>%
+      m_add_model(data = m_fetch_pdb(pdb_id), format = "pdb") %>%
+      m_set_style(m_style_cartoon()) %>% #set style: cartoon or stick
+      m_zoom_to() %>%
+      # Set style of structures
+      m_set_style(style = m_style_cartoon(color_structure)) %>%
+      # Style the alpha helix
+      m_set_style(sel = m_sel(ss = "h"), # Style alpha helix
+                  style = m_style_cartoon(color_helix)) %>%
+      m_set_style(sel = m_sel(ss = "s"), # Style beta sheet
+                  style = m_style_cartoon(color_sheet))
+    return(p)
+  }
 
-prova <- 
-  r3dmol() %>%
-  m_add_model(data = m_fetch_pdb("2HF6"), format = "pdb") %>%
-  m_set_style(style = c(m_style_cartoon(), m_style_stick())) %>%
-  m_zoom_to() %>% 
-    # Set style of structures
-    m_set_style(style = m_style_cartoon(color = "#00AFBB")) %>%
-    # Style the alpha helix
-  m_set_style(
-    sel = m_sel(ss = "h"), # Style alpha helix
-    style = m_style_cartoon(color = "#636efa")
-  ) %>% 
-    m_set_style(
-    sel = m_sel(ss = "s"), # Style beta sheet
-    style = m_style_cartoon(color = "#FC4E07")
-  ) 
-
-prova
-
-r3dmol(
-  id = "4zyo",
-  elementId = "pdb_4zyo"
-) %>%
-  # Add model to scene
-  m_add_model(data = prova, format = "pdb") %>% 
-  # Zoom to encompass the whole scene
-  m_zoom_to() %>%
-  # Set style of structures
-  m_set_style(style = m_style_cartoon(color = "#00cc96")) %>%
-  # Set style of specific selection (selecting by secondary)
-  m_set_style(
-    sel = m_sel(ss = "s"),
-    style = m_style_cartoon(color = "#636efa", arrows = TRUE)
-  ) %>%
-  # Style the alpha helix
-  m_set_style(
-    sel = m_sel(ss = "h"), # Style alpha helix
-    style = m_style_cartoon(color = "#ff7f0e")
-  ) %>%
-  # Rotate the scene by given angle on given axis
-  m_rotate(angle = 90, axis = "y")
+bob <- structure(pdb_id = "2HF6")
+bob
 
 ```
-
-
-
-
-```{r}
-data_4_pdb <- raw_data %>%
-  dplyr::select(protein_i_ds, gene_names, id) %>%
-  dplyr::mutate(gene_names = stringr::str_extract(gene_names, "[^;]*")) %>%
-  dplyr::rename(unique_gene_names = gene_names) %>%
-  janitor::get_dupes(unique_gene_names) %>%
-  dplyr::mutate(
-    unique_gene_names = dplyr::case_when(
-      unique_gene_names != "" ~ paste0(
-        unique_gene_names,
-        "__",
-        stringr::str_extract(protein_i_ds, "[^;]*")
-      ),
-      TRUE ~ stringr::str_extract(protein_i_ds, "[^;]*")
-    )
-  ) %>%
-  dplyr::select(unique_gene_names, id) %>%
-  dplyr::right_join(raw_data, by = "id") %>%
-  dplyr::mutate(
-    gene_names = dplyr::case_when(unique_gene_names != "" ~ unique_gene_names,
-                                  TRUE ~ gene_names)
-  ) %>%
-  dplyr::select(-unique_gene_names) %>%
-  dplyr::mutate(gene_names = dplyr::if_else(
-    gene_names == "",
-    stringr::str_extract(protein_i_ds, "[^;]*"),
-    gene_names
-  )) %>%
-  dplyr::mutate(gene_names = stringr::str_extract(gene_names, "[^;]*")) %>%
-  dplyr::select(
-    gene_names,
-    protein_i_ds,
-    dplyr::all_of(exp_des$key),
-    peptides,
-    razor_unique_peptides,
-    unique_peptides,
-    reverse,
-    potential_contaminant,
-    only_identified_by_site
-  ) %>%
-  # tidyr::pivot_longer(
-  #   !c(
-  #     gene_names,
-  #     protein_i_ds,
-  #     
-  #     peptides,
-  #     razor_unique_peptides,
-  #     unique_peptides,
-  #     reverse,
-  #     potential_contaminant,
-  #     only_identified_by_site
-  #   ),
-  #   names_to = "key",
-  #   values_to = "raw_intensity"
-  # ) %>% 
-    dplyr::filter(!reverse == "+",
-                !potential_contaminant == "+",
-                !only_identified_by_site == "+") %>%
-# dplyr::inner_join(., exp_des, by = "key") %>%   #aggiunge righe e colonne che matchano tra expdesign e data
-#   dplyr::mutate(bin_intensity = dplyr::if_else(is.na(raw_intensity), 0, 1)) %>%  #Nuova colonna. 1 se valore esite, 0 se NA
-#   dplyr::select(-key) %>%
-  dplyr::mutate(protein_i_ds = stringr::str_extract(protein_i_ds, "[^;]*")) 
-  
-```
-
