@@ -223,8 +223,8 @@ tests <- c("tc1d22b_vs_ev")
 r6$stat_t_test(
   data = r6$imputed_data,
   test = tests,
-  fc = 1,
-  alpha = 0.01
+  fc = 0,
+  alpha = 0.05
 )
 ```
 
@@ -260,7 +260,7 @@ sig <- significant(data=r6$stat_table, test = "tc1d22b_vs_ev")
 ### Only Up-regulated
 
 ```{r Filter Significant Up}
-up_down <- sig_up_down(data=sig, remove="") 
+up_down <- sig_up_down(data=sig, remove="Down") 
 ```
 
 # STRINGdb
@@ -268,9 +268,46 @@ up_down <- sig_up_down(data=sig, remove="")
 ### Nodes & Edges
 
 ```{r Create Nodes & Edges}
+nodes <- function(data, nodesize=5){
+  data <- data %>% 
+    dplyr::pull(gene_names) %>% 
+    rba_string_map_ids(species = 9606, echo_query = TRUE) %>%
+    dplyr::select(stringId, preferredName, annotation ) %>% 
+    dplyr::rename(name=preferredName) %>% 
+    dplyr::left_join(sig, by= c("name"="gene_names")) %>% 
+    dplyr::select(-c(stringId, annotation, fold_change)) %>% 
+    dplyr::rename(value =p_adj, size = p_val, grp = regulation) %>% 
+    dplyr::mutate(value = -log10(value)) %>% 
+    dplyr::mutate(size = -log10(size)*nodesize) %>% 
+    dplyr::mutate(grp = as.factor(grp)) %>% 
+    tidyr::as_tibble()
+  
+  return(data)
+}
+
 nodes <- nodes(data=up_down)
 
-edges <- edges(data= nodes, score=0.7)
+edges <- nodes %>%
+    dplyr::pull(name) %>%
+    rba_string_interactions_network(species = 9606) %>%
+    dplyr::mutate(Names = paste0(preferredName_A, "_", preferredName_B)) %>%
+    dplyr::distinct(Names, .keep_all = TRUE) %>%
+    dplyr::filter(escore != 0, dscore != 0) %>%
+    tidyr::unite("stringId", stringId_A:stringId_B, remove = TRUE) %>%
+    dplyr::distinct(stringId, .keep_all = TRUE) %>%
+    #dplyr::select(FROM,TO, escore, dscore) %>%
+    #se facessi tidyr::unite() potrei unire due colonne in una unica e poi fare il distinct
+    dplyr::mutate(Score1 = (escore - 0.041) * (1 - 0.041)) %>%
+    dplyr::mutate(Score2 = (dscore - 0.041) * (1 - 0.041)) %>%
+    dplyr::mutate(Score_combin = 1 - (1 - Score1) * (1 - Score2)) %>%
+    dplyr::mutate(tot_score = Score_combin + 0.041 * (1 - Score_combin)) %>%
+    dplyr::filter(tot_score > 0.9) %>% #Filtro sullo score
+    dplyr::select(source = preferredName_A, target = preferredName_B, score) %>%
+    dplyr::filter(source != target)
+
+
+#edges <- edges(data= nodes, score=0.5)
+
 ```
 
 ### Filter Nodes
@@ -290,7 +327,7 @@ plot_net(datanode=nodes, dataedge=edges)
 ```{r All from nodes to network}
 plot_all (
   data = r6$stat_table,
-  test = "tc1d22b_vs_ev",
+  test = "rev_vs_dmso",
   remove = "Down",
   score = 0.4,
   animation = FALSE,
@@ -424,65 +461,6 @@ p2
 
 
 ```{r}
-color_nodes <- function(list, nodes) {
-  n_nodes <- nrow(nodes)
-  for (i in 1:n_nodes) {
-    category <-
-      list %>%
-      purrr::pluck("x", "opts", "series", 1, "data", i, "category")
-    
-    list <-
-      purrr::modify_in(list,
-                       list("x", "opts", "series", 1, "data", i),
-                       \(x) c(x, c(itemStyle= list(borderWidth = 2,
-                           borderColor = if_else(category == "Up", "red", "blue")
-                         ))
-                       ))
-  }
-  return(list)
-  
-}
-
-p <-echarts4r::e_charts(animation = FALSE) %>%
-   echarts4r::e_graph(
-     roam = TRUE,
-     force = list(
-       initLayout = "force",
-       repulsion = 100,
-       edgeLength = 30,
-       layoutAnimation = FALSE
-     ),
-    # itemStyle= list(borderWidth=2, borderColor="borderColor"),
-     autoCurveness = TRUE,
-     emphasis = list(focus = "adjacency",
-                     lineStyle = list(width = 10))
-   ) %>%
-   echarts4r::e_graph_nodes(
-     nodes = nodes,
-     names = name,
-     value = value,
-     size = size,
-     category = grp,
-   ) %>%
-   echarts4r::e_graph_edges(
-     edges = edges,
-     source = source,
-     target = target,
-     value = value,
-     size = value
-   ) %>%
-  echarts4r::e_labels() %>% 
-   echarts4r::e_tooltip()
-
-p5 <- color_nodes(list = p, nodes = nodes)
-
-p5
-```
-
-
-
-
-```{r}
 make_nodes <- function(list_from, focus, direction) {
       
       if (list_from == "univariate") {
@@ -606,20 +584,20 @@ make_edges <- function(source, names) {
             dplyr::left_join(raw_corum_table, by = c("source" = "components_genesymbols")) %>%
             dplyr::select(-dupe_count) %>%
             unique() %>% 
-            dplyr::rename(complex = name) 
-            
-          final_table <- edges_corum_table %>%
-            dplyr::mutate(comb_name = paste0(target, "_", source)) %>%
-            group_by(comb_name) %>%
-            dplyr::left_join(edges_corum_table) %>%
-            dplyr::summarize(complex = paste(complex, collapse = ";"),
-                             score = sum(score)) %>%
-            tidyr::separate_wider_delim(cols = comb_name,
-                                        delim = "_",
-                                        names = c("source", "target")) %>%
-            dplyr::mutate(color = "#4daf4a")
-          # dplyr::mutate(score = 1, color = "#4daf4a")
-          
+            dplyr::mutate(score=1, color = "#4daf4a") %>% 
+            dplyr::rename(complex = name) %>% 
+             dplyr::group_by(source, target, color) %>% 
+            tidyr::nest() %>% 
+            tidyr::unnest_wider(data, names_sep = "_") %>%
+            dplyr::ungroup() %>% 
+            dplyr::rowwise() %>% 
+            dplyr::mutate(
+              score = sum(data_score),
+              complex = toString(data_complex),
+              size = dplyr::if_else(score <= 5, score, 5),
+              database = "Corum"
+            ) %>% 
+            dplyr::select(source, target, complex, score, color, size, database)
         } else {
           edges_corum_table <- NULL
         }
@@ -630,7 +608,7 @@ make_edges <- function(source, names) {
         edges_table_final <- NULL
       } else {
         edges_table_final <- edges_string_table %>%
-          dplyr::bind_rows(final_table) %>% 
+          dplyr::bind_rows(edges_corum_table) %>% 
           dplyr::mutate(size = 2.5)
         
     
@@ -708,6 +686,71 @@ plot_ppi_network <- function(edge, node, list_from, score_thr, isolate_nodes, la
     }
   
 ```
+
+
+```{r}
+library(purrr)
+nodes <- make_nodes(list_from = "univariate", focus = "tc1d22b_vs_ev", direction = "up")
+
+nodes_name <- nodes %>% dplyr::pull(gene_names)
+edges_corum <- make_edges(source = "corum", names=nodes_name)
+
+p <- plot_ppi_network(edge = edges, node = nodes, list_from = "univariate", score_thr = 0.4, isolate_nodes = FALSE, layout = "force", show_names = FALSE)
+p
+
+
+```
+
+
+###PROTEIN STRUCTURES
+```{r From gene_names to PDB_id}
+pdb_id <- function(data){
+  prot_id <- data %>% 
+  dplyr::filter(!reverse == "+", !potential_contaminant == "+", !only_identified_by_site == "+") %>% 
+  dplyr::mutate(protein_i_ds= stringr::str_extract(protein_i_ds, "[^;]*")) %>% 
+  pull(protein_i_ds) 
+  
+uniprot_information <-
+  fetch_uniprot(
+    uniprot_ids = prot_id,
+    columns = c("xref_pdb")
+  ) %>%  
+tidyr::drop_na("xref_pdb") %>%
+  dplyr::mutate(pdb_id = stringr::str_extract(xref_pdb, "[^;]*")) %>% 
+  dplyr::inner_join(data, by=c("accession"="protein_i_ds")) %>% 
+    dplyr::select(uniprot_id=accession, pdb_id, gene_names)  
+
+return(uniprot_information)
+}
+
+```
+
+```{r Structures}
+#PROVA
+structure <-
+  function(pdb_id,
+           color_structure = "#00AFBB",
+           color_helix = "#636efa",
+           color_sheet = "#FC4E07") {
+    p <- r3dmol() %>%
+      m_add_model(data = m_fetch_pdb(pdb_id), format = "pdb") %>%
+      m_set_style(m_style_cartoon()) %>% #set style: cartoon or stick
+      m_zoom_to() %>%
+      # Set style of structures
+      m_set_style(style = m_style_cartoon(color_structure)) %>%
+      # Style the alpha helix
+      m_set_style(sel = m_sel(ss = "h"), # Style alpha helix
+                  style = m_style_cartoon(color_helix)) %>%
+      m_set_style(sel = m_sel(ss = "s"), # Style beta sheet
+                  style = m_style_cartoon(color_sheet))
+    return(p)
+  }
+
+bob <- structure(pdb_id = "2HF6")
+bob
+
+```
+
 
 
 ```{r}
@@ -800,74 +843,3 @@ edges_go <- go_data%>%
    echarts4r::e_tooltip()
 ```
 
-
-```{r}
-library(purrr)
-nodes <- make_nodes(list_from = "univariate", focus = "tc1d22b_vs_ev", direction = "both")
-
-nodes_name <- nodes %>% dplyr::pull(gene_names)
-edges <- make_edges(source = c("corum", "string"), names=nodes_name )
-
-p <- plot_ppi_network(edge = edges, node = nodes, list_from = "univariate", score_thr = 0.8, isolate_nodes = FALSE, layout = "force", show_names = FALSE)
-p
-
-edges_comb_complex <- edges_corum_table %>% 
-  dplyr::mutate(comb_name=paste0(target, "_", source)) %>%
-  group_by(comb_name) %>% 
-  dplyr::left_join(edges_corum_table) %>%
-  dplyr::summarize(complex=paste(complex, collapse=";"),
-                   score=sum(score)) %>%
-  tidyr::separate_wider_delim(cols = comb_name, delim = "_", names = c( "source", "target")) %>% 
-  dplyr::mutate(color = "#4daf4a") %>% 
-  View()
-```
-
-
-###PROTEIN STRUCTURES
-```{r From gene_names to PDB_id}
-pdb_id <- function(data){
-  prot_id <- data %>% 
-  dplyr::filter(!reverse == "+", !potential_contaminant == "+", !only_identified_by_site == "+") %>% 
-  dplyr::mutate(protein_i_ds= stringr::str_extract(protein_i_ds, "[^;]*")) %>% 
-  pull(protein_i_ds) 
-  
-uniprot_information <-
-  fetch_uniprot(
-    uniprot_ids = prot_id,
-    columns = c("xref_pdb")
-  ) %>%  
-tidyr::drop_na("xref_pdb") %>%
-  dplyr::mutate(pdb_id = stringr::str_extract(xref_pdb, "[^;]*")) %>% 
-  dplyr::inner_join(data, by=c("accession"="protein_i_ds")) %>% 
-    dplyr::select(uniprot_id=accession, pdb_id, gene_names)  
-
-return(uniprot_information)
-}
-
-```
-
-```{r Structures}
-#PROVA
-structure <-
-  function(pdb_id,
-           color_structure = "#00AFBB",
-           color_helix = "#636efa",
-           color_sheet = "#FC4E07") {
-    p <- r3dmol() %>%
-      m_add_model(data = m_fetch_pdb(pdb_id), format = "pdb") %>%
-      m_set_style(m_style_cartoon()) %>% #set style: cartoon or stick
-      m_zoom_to() %>%
-      # Set style of structures
-      m_set_style(style = m_style_cartoon(color_structure)) %>%
-      # Style the alpha helix
-      m_set_style(sel = m_sel(ss = "h"), # Style alpha helix
-                  style = m_style_cartoon(color_helix)) %>%
-      m_set_style(sel = m_sel(ss = "s"), # Style beta sheet
-                  style = m_style_cartoon(color_sheet))
-    return(p)
-  }
-
-bob <- structure(pdb_id = "2HF6")
-bob
-
-```
