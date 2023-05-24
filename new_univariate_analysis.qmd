@@ -701,6 +701,48 @@ p
 
 ```
 
+###ROC curve
+```{r Set random combination across upregulater}
+all_edges <- make_edges(source = c("string", "corum"), names=nodes_name)
+
+edges_string <-  make_edges(source = "string", names=nodes_name)
+
+true_positive <- edges_corum %>% 
+  filter(source %in% edges_string$source & target %in% edges_string$target | source %in% edges_string$target & target %in% edges_string$source) %>% View() #CORUM source/target in EdgesSTRING
+
+false_negative <- edges_corum %>% 
+  filter(!source %in% edges_string$source & !target %in% edges_string$target) %>% View() #CORUM source/target NOT in EdgesSTRING
+
+
+
+random_comb <- all_edges %>%
+  tidyr::expand_grid(
+    target = all_edges$target,
+    source = all_edges$source,
+    .name_repair = "check_unique"
+  ) %>%
+  dplyr::filter(target != source)
+
+
+
+
+
+
+# library(pROC)
+# library(randomForest)
+# set.seed(420)
+# num.sample <- nrow(all_edges)
+# weight <- sort(rnorm(n=num.sample), mean=mean(all_edges$score), sd=sd(all_edges$score))
+# significant <- ifelse(test=runif(n=num.sample) > score)
+```
+
+
+
+
+
+
+
+
 
 ###PROTEIN STRUCTURES
 ```{r From gene_names to PDB_id}
@@ -750,8 +792,6 @@ bob <- structure(pdb_id = "2HF6")
 bob
 
 ```
-
-
 
 ```{r}
 tidyr::expand_grid(target = c("gene1", "gene2", "gene3"), source = c("gene1", "gene2", "gene3")) %>% 
@@ -842,4 +882,3 @@ edges_go <- go_data%>%
    echarts4r::e_title("Network", "Gene Ontology") %>%
    echarts4r::e_tooltip()
 ```
-
