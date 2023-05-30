@@ -703,15 +703,24 @@ p
 
 ###ROC curve
 ```{r Set random combination across upregulater}
+gene_names <- data.table::fread(here::here("9606.protein.info.v11.5.txt")) %>% 
+  dplyr::select(string_protein_id, preferred_name)
+
+human_string <- data.table::fread(here::here("9606.protein.physical.links.v11.5.txt")) %>% 
+  dplyr::mutate(combined_score= combined_score/1000) %>% 
+  dplyr::left_join(gene_names, by=c())
+
+
+
 all_edges <- make_edges(source = c("string", "corum"), names=nodes_name)
 
-edges_string <-  make_edges(source = "string", names=nodes_name)
+edges_string <-  make_edges(source = "string", names=nodes_name) #Uso questa funzione perchè inizio con tutti gli edges di string, senza filtro. Per i filtri devo applicare l'altra funzione.
 
 true_positive <- edges_corum %>% 
-  filter(source %in% edges_string$source & target %in% edges_string$target | source %in% edges_string$target & target %in% edges_string$source) %>% View() #CORUM source/target in EdgesSTRING
+  filter(source %in% edges_string$source & target %in% edges_string$target | source %in% edges_string$target & target %in% edges_string$source)  #CORUM source/target in EdgesSTRING
 
 false_negative <- edges_corum %>% 
-  filter(!source %in% edges_string$source & !target %in% edges_string$target) %>% View() #CORUM source/target NOT in EdgesSTRING
+  filter(!source %in% edges_string$source & !target %in% edges_string$target) #CORUM source/target NOT in EdgesSTRING
 
 
 
